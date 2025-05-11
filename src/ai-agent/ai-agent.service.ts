@@ -1,0 +1,76 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { getVercelAITools } from '@coinbase/agentkit-vercel-ai-sdk';
+import { AgentKit } from '@coinbase/agentkit';
+import { generateText } from 'ai';
+import { openai } from '@ai-sdk/openai';
+import { STRATEGY_PRESETS, StrategyKey } from '../uniswap/strategy-presets';
+
+@Injectable()
+export class AiAgentService {
+  private agentKit: AgentKit | null = null;
+  private tools: any = null;
+  private readonly logger = new Logger(AiAgentService.name);
+
+  /**
+   * Ensure AgentKit and tools are initialized (cached after first use)
+   */
+  private async ensureInitialized() {
+    if (!this.agentKit) {
+      this.agentKit = await AgentKit.from({
+        cdpApiKeyName: process.env.CDP_API_KEY_NAME!,
+        cdpApiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY!,
+      });
+      this.logger.log('AgentKit initialized');
+    }
+    if (!this.tools) {
+      const vercelTools = await getVercelAITools(this.agentKit);
+      const { uniswapTools } = await import('./tools/uniswap.tools');
+      // Merge tools as an object (ToolSet), per Vercel AI SDK docs
+      const uniswapToolsObject = Object.fromEntries(
+        uniswapTools.map((tool) => [tool.name, tool]),
+      );
+      this.tools = { ...vercelTools, ...uniswapToolsObject };
+      this.logger.log(
+        'Vercel AI tools + Uniswap tools initialized. Tool count: ' +
+          Object.keys(this.tools).length,
+      );
+    }
+  }
+
+  /**
+   * Generate a response using OpenAI + AgentKit tools
+   * @param prompt - User prompt for the agent
+   * @param system - (Optional) System prompt for LLM
+   * @param maxSteps - (Optional) Max tool steps
+   * @returns LLM response text
+   */
+  async chat({
+    prompt,
+    system,
+    maxSteps = 10,
+    strategy,
+  }: {
+    prompt: string;
+    system?: string;
+    maxSteps?: number;
+    strategy?: StrategyKey;
+  }): Promise<string> {
+    await this.ensureInitialized();
+    // If a strategy is provided, override system prompt
+    let systemPrompt = system;
+    if (!systemPrompt && strategy && STRATEGY_PRESETS[strategy]) {
+      systemPrompt = STRATEGY_PRESETS[strategy].systemPrompt;
+    }
+    if (!systemPrompt) {
+      systemPrompt = 'You are an onchain AI assistant with access to a wallet.';
+    }
+    const { text } = await generateText({
+      model: openai('gpt-4o-mini'), // Requires OPENAI_API_KEY in env
+      system: systemPrompt,
+      prompt,
+      tools: this.tools,
+      maxSteps,
+    });
+    return text;
+  }
+}

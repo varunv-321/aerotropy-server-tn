@@ -46,7 +46,7 @@ export class UniswapController {
         `Request for unsupported network: ${network}. UniswapService will default to 'base'.`,
       );
     }
-    return this.uniswapService.getV3PoolsWithAPR(network);
+    return this.uniswapService.getUniswapPoolsWithAPR(network);
   }
 
   @Get(':network/best-pools')
@@ -107,6 +107,12 @@ export class UniswapController {
     type: String,
     description:
       "Risk strategy preset: 'low', 'medium', or 'high'. If set, applies preset weights/filters. Custom weights override preset.",
+  })
+  @ApiQuery({
+    name: 'version',
+    required: false,
+    type: Number,
+    description: 'Version of Uniswap to use (default: 3)',
   })
   @ApiQuery({
     name: 'historyDays',
@@ -183,6 +189,7 @@ export class UniswapController {
     @Query('volumeTrendWeight') volumeTrendWeight?: string,
     @Query('historyDays') historyDays?: string,
     @Query('strategy') strategy?: string,
+    @Query('version') version?: number,
   ): Promise<PoolWithAPR[]> {
     // Use STRATEGY_PRESETS if strategy is set
     let opts: any =
@@ -208,7 +215,7 @@ export class UniswapController {
         : opts.volumeTrendWeight,
       historyDays: historyDays ? Number(historyDays) : opts.historyDays,
     };
-    return this.uniswapService.getBestPoolsWithScore(network, opts);
+    return this.uniswapService.getBestPoolsWithScore(network, opts, version);
   }
 
   @Get(':network/pools/strategy/:strategy')
@@ -223,6 +230,7 @@ export class UniswapController {
     required: true,
     enum: ['low', 'medium', 'high'],
   })
+  @ApiParam({ name: 'version', required: false })
   @ApiResponse({
     status: 200,
     description: 'List of pools for the chosen strategy.',

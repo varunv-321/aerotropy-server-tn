@@ -9,9 +9,15 @@ export const uniswapTools = [
       'Get Uniswap V3 pools filtered and scored by investment strategy (low, medium, high).',
     parameters: z.object({
       network: z.string().describe('Blockchain network (e.g., base, mainnet)'),
-      strategy: z.enum(['low', 'medium', 'high']).describe('Investment strategy risk level'),
+      strategy: z
+        .enum(['low', 'medium', 'high'])
+        .describe('Investment strategy risk level'),
       topN: z.number().int().optional().describe('Number of pools to return'),
-      historyDays: z.number().int().optional().describe('Number of days for historical metrics'),
+      historyDays: z
+        .number()
+        .int()
+        .optional()
+        .describe('Number of days for historical metrics'),
     }),
     async execute({ network, strategy, topN, historyDays }) {
       const params = new URLSearchParams();
@@ -33,7 +39,10 @@ export const uniswapTools = [
       minTVL: z.string().optional().describe('Minimum TVL in USD'),
       minAPR: z.string().optional().describe('Minimum APR (%)'),
       topN: z.number().int().optional().describe('Number of pools to return'),
-      strategy: z.enum(['low', 'medium', 'high']).optional().describe('Investment strategy risk level (optional)'),
+      strategy: z
+        .enum(['low', 'medium', 'high'])
+        .optional()
+        .describe('Investment strategy risk level (optional)'),
     }),
     async execute({ network, minTVL, minAPR, topN, strategy }) {
       const params = new URLSearchParams();
@@ -61,6 +70,104 @@ export const uniswapTools = [
       if (!response.ok)
         throw new Error(`Uniswap API error: ${response.statusText}`);
       return await response.json();
+    },
+  },
+  {
+    name: 'mintUniswapPosition',
+    description: 'Mint a new Uniswap V3 liquidity position (invest in a pool).',
+    parameters: z.object({
+      network: z
+        .string()
+        .describe('Blockchain network (e.g., base-mainnet, base-sepolia)'),
+      poolData: z
+        .object({
+          id: z.string().describe('Pool address'),
+          feeTier: z
+            .string()
+            .describe(
+              'Fee tier as string (e.g., "100", "500", "3000", "10000")',
+            ),
+          token0: z
+            .object({
+              id: z.string().describe('Token0 address'),
+              symbol: z.string().describe('Token0 symbol'),
+              name: z.string().describe('Token0 name'),
+              decimals: z.string().describe('Token0 decimals as string'),
+            })
+            .describe('Token0 data'),
+          token1: z
+            .object({
+              id: z.string().describe('Token1 address'),
+              symbol: z.string().describe('Token1 symbol'),
+              name: z.string().describe('Token1 name'),
+              decimals: z.string().describe('Token1 decimals as string'),
+            })
+            .describe('Token1 data'),
+        })
+        .describe('Pool data from a graph query or previous pool search'),
+      amount0: z
+        .string()
+        .describe('Amount of token0 to add (in human-readable format)'),
+      amount1: z
+        .string()
+        .describe('Amount of token1 to add (in human-readable format)'),
+      tickLowerOffset: z
+        .number()
+        .int()
+        .min(1)
+        .default(1000)
+        .describe('Offset from the current tick for the lower bound'),
+      tickUpperOffset: z
+        .number()
+        .int()
+        .min(1)
+        .default(1000)
+        .describe('Offset from the current tick for the upper bound'),
+      slippageTolerance: z
+        .number()
+        .min(0)
+        .max(100)
+        .default(0.5)
+        .describe('Slippage tolerance in percentage'),
+    }),
+    async execute({
+      network,
+      poolData,
+      amount0,
+      amount1,
+      tickLowerOffset,
+      tickUpperOffset,
+      slippageTolerance,
+    }) {
+      // The payload needs to match MintPositionDto
+      const payload = {
+        poolData,
+        amount0,
+        amount1,
+        tickLowerOffset,
+        tickUpperOffset,
+        network,
+        slippageTolerance,
+      };
+
+      const url = `${process.env.UNISWAP_API_BASE_URL || 'http://localhost:3000'}/v1/uniswap/v3/${network}/mint-position`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Failed to mint position: ${response.status} ${response.statusText} - ${errorText}`,
+        );
+      }
+
+      return await response.json(); // Returns { tokenId: string }
     },
   },
 ];

@@ -57,9 +57,10 @@ export class UniswapService {
    * @param network
    * @returns Array of PoolWithAPR (unsorted, unfiltered)
    */
-  async getV3PoolsWithAPR(
+  async getUniswapPoolsWithAPR(
     network: string,
     historyDays = 7,
+    version?: number,
   ): Promise<PoolWithAPR[]> {
     // For now, we'll hardcode to 'base' and use the predefined URL.
     // Later, this could be dynamic based on the 'network' parameter.
@@ -87,7 +88,10 @@ export class UniswapService {
 
     // Use Apollo Client to query the subgraph
     try {
-      const apolloClient = this.graphqlClientService.getClient();
+      const apolloClient =
+        version === 3
+          ? this.graphqlClientService.getClient()
+          : this.graphqlClientService.getClientV4();
       const response = await apolloClient.query<GraphQLResponse>({
         query: gql`
           ${queryWithHistory}
@@ -250,6 +254,7 @@ export class UniswapService {
       volumeTrendWeight?: number; // Weight for volume trend (positive)
       historyDays?: number; // Number of days for historical analysis
     },
+    version?: number,
   ): Promise<PoolWithAPR[]> {
     const {
       minTVL = 100000,
@@ -261,9 +266,10 @@ export class UniswapService {
       tvlTrendWeight = 0.1, // reward positive TVL trend
       volumeTrendWeight = 0.1, // reward positive volume trend
     } = options || {};
-    const pools = await this.getV3PoolsWithAPR(
+    const pools = await this.getUniswapPoolsWithAPR(
       network,
       options?.historyDays ?? 7,
+      version,
     );
     if (!pools.length) return [];
 

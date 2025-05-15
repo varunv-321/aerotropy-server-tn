@@ -171,11 +171,44 @@ Mint a new Uniswap V3 liquidity position.
 
 ### AI Agent Endpoints
 
+#### Regular Chat
+
 ```
 POST /ai-agent/chat
 ```
 
-Interact with the AI agent through natural language.
+Interact with the AI agent through natural language. Returns the complete response at once.
+
+**Request Body:**
+
+```json
+{
+  "prompt": "Show me high APR pools on Base",
+  "strategy": "low", // Optional: "low", "medium", "high"
+  "maxSteps": 10, // Optional
+  "system": "..." // Optional
+}
+```
+
+**Response:**
+
+```json
+{
+  "text": "Based on current data, here are some high APR pools on Base..."
+}
+```
+
+#### Streaming Chat (New!)
+
+```
+POST /ai-agent/chat/stream
+```
+
+Interact with the AI agent with real-time streaming responses. The response is streamed as it's being generated, improving the user experience for longer responses.
+
+**Request Body:** Same as `/ai-agent/chat`
+
+**Response:** Text/plain streaming response with chunks of text sent as they are generated
 
 ## Using the AI Agent
 

@@ -170,4 +170,66 @@ export const uniswapTools = [
       return await response.json(); // Returns { tokenId: string }
     },
   },
+  {
+    name: 'removeUniswapPosition',
+    description:
+      'Remove liquidity from a Uniswap V3 position and optionally burn the NFT.',
+    parameters: z.object({
+      network: z
+        .string()
+        .describe('Blockchain network (e.g., base-mainnet, base-sepolia)'),
+      tokenId: z
+        .string()
+        .describe('The NFT token ID of the position to remove liquidity from'),
+      burnNFT: z
+        .boolean()
+        .default(false)
+        .describe('Whether to burn the NFT position after removing liquidity'),
+      slippageTolerance: z
+        .number()
+        .min(0)
+        .max(100)
+        .default(0.5)
+        .describe('Slippage tolerance in percentage'),
+    }),
+    async execute({ network, tokenId, burnNFT, slippageTolerance }) {
+      // The payload needs to match RemovePositionDto
+      const payload = {
+        tokenId,
+        network,
+        burnNFT,
+        slippageTolerance,
+      };
+
+      const url = `${process.env.UNISWAP_API_BASE_URL || 'http://localhost:3000'}/v1/uniswap/v3/${network}/remove-position`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          `Failed to remove position: ${response.status} ${response.statusText} - ${errorText}`,
+        );
+      }
+
+      const result = await response.json();
+      return {
+        ...result,
+        summary:
+          `Successfully removed liquidity from position ${tokenId}:
+` +
+          `- Amount of token0 removed: ${result.amount0Removed}
+` +
+          `- Amount of token1 removed: ${result.amount1Removed}
+` +
+          `- Position NFT ${result.positionBurned ? 'was burned' : 'remains intact'}`,
+      };
+    },
+  },
 ];

@@ -276,6 +276,98 @@ export class UniswapController {
   }
 
   /**
+   * Get position sizing recommendations for a strategy
+   * GET /uniswap/v3/:network/position-sizing/:strategy
+   */
+  @Get(':network/position-sizing/:strategy')
+  @ApiOperation({
+    summary: 'Get position sizing recommendations for a specific strategy',
+    description:
+      'Returns optimal position sizes for pools based on risk profile (low, medium, high) and investment amount.',
+  })
+  @ApiParam({ name: 'network', required: true })
+  @ApiParam({
+    name: 'strategy',
+    required: true,
+    enum: ['low', 'medium', 'high'],
+  })
+  @ApiQuery({
+    name: 'investmentAmount',
+    required: true,
+    description: 'Total investment amount in USD',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'maxPositions',
+    required: false,
+    description: 'Maximum number of positions to recommend',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'equalWeight',
+    required: false,
+    description: 'Whether to distribute investment equally among positions',
+    type: Boolean,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Position size recommendations for the chosen strategy.',
+  })
+  async getPositionSizing(
+    @Param('network') network: string,
+    @Param('strategy') strategy: StrategyKey,
+    @Query('investmentAmount') investmentAmount: string,
+    @Query('maxPositions') maxPositions?: string,
+    @Query('equalWeight') equalWeight?: string,
+  ) {
+    // Import position sizing utility
+    const { calculatePositionSizes } = await import('./position-sizing.utils');
+
+    // Validate investment amount
+    const totalInvestmentUSD = Number(investmentAmount);
+    if (isNaN(totalInvestmentUSD) || totalInvestmentUSD <= 0) {
+      throw new BadRequestException(
+        'Investment amount must be a positive number',
+      );
+    }
+
+    // Get strategy preset
+    const preset = STRATEGY_PRESETS[strategy] || STRATEGY_PRESETS.low;
+
+    // Get pools based on strategy
+    const pools = await this.uniswapService.getBestPoolsWithScore(network, {
+      ...preset,
+      topN: maxPositions ? Number(maxPositions) : 10,
+    });
+
+    // Calculate position sizes
+    const positionSizes = calculatePositionSizes(pools, {
+      totalInvestmentUSD,
+      equalWeight: equalWeight === 'true',
+      strategy: preset,
+    });
+
+    // Enrich the response with pool details
+    const poolsMap = new Map(pools.map((pool) => [pool.id, pool]));
+
+    return {
+      strategy,
+      totalInvestmentUSD,
+      positions: positionSizes.map((position) => {
+        const pool = poolsMap.get(position.poolId);
+        return {
+          ...position,
+          token0: pool?.token0.symbol,
+          token1: pool?.token1.symbol,
+          feeTier: pool?.feeTier,
+          apr: pool?.apr,
+          correlation: pool?.correlation,
+        };
+      }),
+    };
+  }
+
+  /**
    * Mint a new Uniswap V3 position (invest in a pool)
    * POST /uniswap/v3/:network/mint-position
    */

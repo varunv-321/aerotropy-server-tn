@@ -1,98 +1,232 @@
 <p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
+  <h1 align="center">AeroTropy Server</h1>
+  <p align="center">AI-Powered DeFi Investment Platform</p>
 </p>
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
-
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
+<p align="center">
+  <img src="https://img.shields.io/badge/node-20.x-brightgreen" alt="Node" />
+  <img src="https://img.shields.io/badge/yarn-1.22.x-blue" alt="Yarn" />
+  <img src="https://img.shields.io/badge/nestjs-11.x-red" alt="NestJS" />
+  <img src="https://img.shields.io/badge/uniswap-v3-purple" alt="Uniswap" />
+  <img src="https://img.shields.io/badge/openai-gpt--4o--mini-darkgreen" alt="OpenAI" />
 </p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+AeroTropy Server is a NestJS-based backend that combines Uniswap V3 DeFi protocols with AI-powered decision making. It provides:
 
-## Project setup
+- **Uniswap V3 API**: Analytics, pool discovery, and liquidity position management
+- **AI Agent**: Conversational interface for DeFi investments using OpenAI and AgentKit
+- **Blockchain Integration**: Direct on-chain interaction with Uniswap contracts
+
+## Features
+
+### Uniswap V3 Integration
+
+- **Pool Analysis**: Get pools with APR calculations, volatility metrics, and performance trends
+- **Strategy-based Filtering**: Find the best pools based on predefined strategies (low, medium, high risk)
+- **Position Minting**: Create new liquidity positions through a REST API
+
+### AI Agent
+
+- **Conversational DeFi**: Interact with Uniswap through natural language
+- **Investment Recommendations**: Get personalized pool recommendations
+- **Automated Investments**: Create positions through conversation
+
+## Project Setup
+
+### Prerequisites
+
+- Node.js 20.x
+- Yarn 1.22+
+- Ethereum wallet with private key (for on-chain transactions)
+- Base or Base Sepolia RPC access
+- OpenAI API key (for AI agent)
+
+### Installation
 
 ```bash
+# Install dependencies
 $ yarn install
+
+# Configure environment variables
+$ cp .env.example .env
+# Edit .env with your credentials and keys
 ```
 
-## Compile and run the project
+### Environment Variables
+
+Copy `.env.example` to `.env` and configure the following variables:
+
+```
+# Required for Uniswap minting
+BASE_SEPOLIA_RPC=      # Base testnet RPC URL
+BASE_MAINNET_RPC=      # Base mainnet RPC URL (optional)
+PRIVATE_KEY=           # Your wallet private key
+
+# Required for AI agent
+OPENAI_API_KEY=        # OpenAI API key
+CDP_API_KEY_NAME=      # Coinbase Developer Platform key name
+CDP_API_KEY_PRIVATE_KEY= # Coinbase Developer Platform private key
+```
+
+### Running the Application
 
 ```bash
-# development
-$ yarn run start
-
-# watch mode
+# Development mode
 $ yarn run start:dev
 
-# production mode
+# Production mode
+$ yarn run build
 $ yarn run start:prod
 ```
 
-## Run tests
+### API Documentation
 
-```bash
-# unit tests
-$ yarn run test
+Once running, Swagger API docs are available at:
 
-# e2e tests
-$ yarn run test:e2e
+```
+http://localhost:3000/api-docs
+```
 
-# test coverage
-$ yarn run test:cov
+## API Reference
+
+### Uniswap V3 Endpoints
+
+#### Get Pools with APR
+
+```
+GET /uniswap/v3/:network/pools-with-apr
+```
+
+Retrieve all Uniswap V3 pools with APR calculations for the given network.
+
+#### Get Best Pools
+
+```
+GET /uniswap/v3/:network/best-pools
+```
+
+Retrieve the best pools based on customizable metrics including APR, TVL, volatility, and trends.
+
+**Query Parameters:**
+
+- `minTVL` - Minimum TVL filter
+- `minAPR` - Minimum APR filter
+- `topN` - Number of results to return
+- `strategy` - Predefined strategy (low, medium, high)
+
+#### Get Pools by Strategy
+
+```
+GET /uniswap/v3/:network/pools/strategy/:strategy
+```
+
+Get pools filtered by a predefined investment strategy.
+
+#### Mint Position (New!)
+
+```
+POST /uniswap/v3/:network/mint-position
+```
+
+Mint a new Uniswap V3 liquidity position.
+
+**Request Body:**
+
+```json
+{
+  "poolData": {
+    "id": "0xPOOL_ADDRESS",
+    "feeTier": "3000",
+    "token0": {
+      "id": "0xTOKEN0_ADDRESS",
+      "symbol": "TOKEN0",
+      "name": "Token 0",
+      "decimals": "18"
+    },
+    "token1": {
+      "id": "0xTOKEN1_ADDRESS",
+      "symbol": "TOKEN1",
+      "name": "Token 1",
+      "decimals": "6"
+    }
+  },
+  "amount0": "0.1",
+  "amount1": "100",
+  "tickLowerOffset": 1000,
+  "tickUpperOffset": 1000,
+  "network": "base-sepolia",
+  "slippageTolerance": 0.5
+}
+```
+
+**Response:**
+
+```json
+{
+  "tokenId": "12345"
+}
+```
+
+### AI Agent Endpoints
+
+```
+POST /ai-agent/chat
+```
+
+Interact with the AI agent through natural language.
+
+## Using the AI Agent
+
+The AI agent is designed to help users interact with Uniswap through natural language conversations. Below are some example prompts that demonstrate the agent's capabilities:
+
+### Prompt Examples
+
+#### Pool Discovery
+
+```
+I want to find high APR pools on Base with at least $100,000 TVL
+```
+
+#### Investment Strategy Selection
+
+```
+What's a good low-risk liquidity investment strategy on Base?
+```
+
+#### Position Creation
+
+```
+I want to invest 0.1 ETH and 100 USDC in the ETH-USDC pool with 0.3% fee
+```
+
+#### Analytics Questions
+
+```
+Which pools have shown the best performance over the last week?
 ```
 
 ## Deployment
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### Docker
 
 ```bash
-$ yarn install -g mau
-$ mau deploy
+# Build the Docker image
+docker build -t aerotropy-server .
+
+# Run the container
+docker run -p 3000:3000 --env-file .env aerotropy-server
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+### Cloud Providers
 
-## Resources
+This application can be deployed to any cloud provider that supports Node.js applications:
 
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+- **AWS**: Use Elastic Beanstalk or ECS
+- **Google Cloud**: Use Cloud Run or App Engine
+- **Azure**: Use App Service
 
 ## License
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+This project is licensed under the MIT License - see the LICENSE file for details.

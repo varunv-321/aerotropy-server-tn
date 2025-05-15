@@ -1,4 +1,13 @@
-import { Controller, Get, Logger, Param, Query } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Logger,
+  Param,
+  Query,
+  Body,
+  BadRequestException,
+} from '@nestjs/common';
 import {
   ApiQuery,
   ApiOperation,
@@ -6,9 +15,11 @@ import {
   ApiResponse,
   ApiTags,
   ApiOkResponse,
+  ApiBody,
 } from '@nestjs/swagger';
 import { UniswapService, PoolWithAPR } from './uniswap.service';
-
+import { UniswapMintService } from './uniswap-mint.service';
+import { MintPositionDto } from './dto/mint-position.dto';
 import { STRATEGY_PRESETS, StrategyKey } from './strategy-presets';
 
 @ApiTags('Uniswap V3')
@@ -16,7 +27,10 @@ import { STRATEGY_PRESETS, StrategyKey } from './strategy-presets';
 export class UniswapController {
   private readonly logger = new Logger(UniswapController.name);
 
-  constructor(private readonly uniswapService: UniswapService) {}
+  constructor(
+    private readonly uniswapService: UniswapService,
+    private readonly uniswapMintService: UniswapMintService,
+  ) {}
 
   @Get(':network/pools-with-apr')
   @ApiOperation({
@@ -253,5 +267,42 @@ export class UniswapController {
       opts.maxPoolAgeDays = 3;
     }
     return this.uniswapService.getBestPoolsWithScore(network, opts);
+  }
+
+  /**
+   * Mint a new Uniswap V3 position (invest in a pool)
+   * POST /uniswap/v3/:network/mint-position
+   */
+  @Post(':network/mint-position')
+  @ApiOperation({
+    summary: 'Mint a new Uniswap V3 position (invest in a pool)',
+    description:
+      'Invest in a Uniswap V3 pool by minting a new position. Returns the NFT token ID representing the position.',
+  })
+  @ApiBody({
+    type: MintPositionDto,
+    description: 'Parameters required to mint a Uniswap V3 position.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Successfully minted position',
+    schema: { example: { tokenId: '12345' } },
+  })
+  @ApiResponse({ status: 400, description: 'Invalid input or minting failed.' })
+  async mintPosition(
+    @Param('network') network: string,
+    @Body() dto: MintPositionDto,
+  ): Promise<{ tokenId: string }> {
+    this.logger.log(`Received mint position request for network: ${network}`);
+    if (network !== dto.network) {
+      throw new BadRequestException('Network in path and body must match');
+    }
+    try {
+      const tokenId = await this.uniswapMintService.mintPosition(dto);
+      return { tokenId };
+    } catch (err) {
+      this.logger.error('Mint position error', err);
+      throw new BadRequestException(err?.message || 'Mint position failed');
+    }
   }
 }

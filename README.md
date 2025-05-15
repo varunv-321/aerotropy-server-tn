@@ -124,7 +124,7 @@ GET /uniswap/v3/:network/pools/strategy/:strategy
 
 Get pools filtered by a predefined investment strategy.
 
-#### Mint Position (New!)
+#### Mint Position
 
 ```
 POST /uniswap/v3/:network/mint-position
@@ -166,6 +166,37 @@ Mint a new Uniswap V3 liquidity position.
 ```json
 {
   "tokenId": "12345"
+}
+```
+
+#### Remove Position (New!)
+
+```
+POST /uniswap/v3/:network/remove-position
+```
+
+Remove liquidity from a Uniswap V3 position and optionally burn the NFT.
+
+**Request Body:**
+
+```json
+{
+  "tokenId": "12345",
+  "network": "base-sepolia",
+  "burnNFT": false,
+  "slippageTolerance": 0.5,
+  "recipient": "0xYOUR_ADDRESS" // Optional: defaults to the wallet address
+}
+```
+
+**Response:**
+
+```json
+{
+  "transactionHash": "0xTRANSACTION_HASH",
+  "amount0Removed": "0.0998",
+  "amount1Removed": "99.5",
+  "positionBurned": false
 }
 ```
 
@@ -232,6 +263,16 @@ What's a good low-risk liquidity investment strategy on Base?
 
 ```
 I want to invest 0.1 ETH and 100 USDC in the ETH-USDC pool with 0.3% fee
+```
+
+#### Position Removal (New!)
+
+```
+Remove all liquidity from my position #12345
+```
+
+```
+Close my position #6789 and burn the NFT
 ```
 
 #### Analytics Questions

@@ -19,7 +19,12 @@ import {
 } from '@nestjs/swagger';
 import { UniswapService, PoolWithAPR } from './uniswap.service';
 import { UniswapMintService } from './uniswap-mint.service';
+import { UniswapRemoveService } from './uniswap-remove.service';
 import { MintPositionDto } from './dto/mint-position.dto';
+import {
+  RemovePositionDto,
+  RemovePositionResponseDto,
+} from './dto/remove-position.dto';
 import { STRATEGY_PRESETS, StrategyKey } from './strategy-presets';
 
 @ApiTags('Uniswap V3')
@@ -30,6 +35,7 @@ export class UniswapController {
   constructor(
     private readonly uniswapService: UniswapService,
     private readonly uniswapMintService: UniswapMintService,
+    private readonly uniswapRemoveService: UniswapRemoveService,
   ) {}
 
   @Get(':network/pools-with-apr')
@@ -303,6 +309,51 @@ export class UniswapController {
     } catch (err) {
       this.logger.error('Mint position error', err);
       throw new BadRequestException(err?.message || 'Mint position failed');
+    }
+  }
+
+  /**
+   * Remove liquidity from a Uniswap V3 position
+   * POST /uniswap/v3/:network/remove-position
+   */
+  @Post(':network/remove-position')
+  @ApiOperation({
+    summary: 'Remove liquidity from a Uniswap V3 position',
+    description:
+      'Remove liquidity from a Uniswap V3 position and optionally burn the NFT. Returns the transaction details and amounts removed.',
+  })
+  @ApiBody({
+    type: RemovePositionDto,
+    description: 'Parameters required to remove liquidity from a position.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Successfully removed liquidity',
+    type: RemovePositionResponseDto,
+  })
+  @ApiResponse({ status: 400, description: 'Invalid input or removal failed.' })
+  async removePosition(
+    @Param('network') network: string,
+    @Body() dto: RemovePositionDto,
+  ): Promise<RemovePositionResponseDto> {
+    this.logger.log(`Received remove position request for network: ${network}`);
+
+    // Ensure the network in path matches network in dto if provided
+    if (dto.network && network !== dto.network) {
+      throw new BadRequestException('Network in path and body must match');
+    }
+
+    // Set network from path if not specified in dto
+    if (!dto.network) {
+      dto.network = network;
+    }
+
+    try {
+      const result = await this.uniswapRemoveService.removePosition(dto);
+      return result;
+    } catch (err) {
+      this.logger.error('Remove position error', err);
+      throw new BadRequestException(err?.message || 'Remove position failed');
     }
   }
 }

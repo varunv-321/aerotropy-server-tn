@@ -25,6 +25,10 @@ import {
   RemovePositionDto,
   RemovePositionResponseDto,
 } from './dto/remove-position.dto';
+import {
+  RebalancePortfolioDto,
+  RebalancePortfolioResponseDto,
+} from './dto/rebalance-portfolio.dto';
 import { STRATEGY_PRESETS, StrategyKey } from './strategy-presets';
 
 @ApiTags('Uniswap V3')
@@ -364,6 +368,81 @@ export class UniswapController {
           correlation: pool?.correlation,
         };
       }),
+    };
+  }
+
+  /**
+   * Get position rebalancing recommendations
+   * POST /uniswap/v3/:network/rebalance-portfolio/:strategy
+   */
+  @Post(':network/rebalance-portfolio/:strategy')
+  @ApiOperation({
+    summary: 'Get position rebalancing recommendations',
+    description:
+      'Analyzes existing positions and market conditions to recommend optimal rebalancing actions.',
+  })
+  @ApiParam({ name: 'network', required: true })
+  @ApiParam({
+    name: 'strategy',
+    required: true,
+    enum: ['low', 'medium', 'high'],
+  })
+  @ApiBody({
+    type: RebalancePortfolioDto,
+    description: 'Current portfolio positions and parameters for rebalancing',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Position rebalancing recommendations',
+    type: RebalancePortfolioResponseDto,
+  })
+  async getRebalancingRecommendations(
+    @Param('network') network: string,
+    @Param('strategy') strategy: StrategyKey,
+    @Body() rebalanceDto: RebalancePortfolioDto,
+  ): Promise<RebalancePortfolioResponseDto> {
+    // Import rebalancing utilities
+    const { generateRebalanceRecommendations } = await import(
+      './position-rebalance.utils'
+    );
+
+    // Validate input
+    if (
+      !rebalanceDto.currentPositions ||
+      !Array.isArray(rebalanceDto.currentPositions)
+    ) {
+      throw new BadRequestException(
+        'Current positions must be provided as an array',
+      );
+    }
+
+    // Get strategy preset
+    const preset = STRATEGY_PRESETS[strategy] || STRATEGY_PRESETS.low;
+
+    // Get all potential pools based on strategy
+    const allPools = await this.uniswapService.getBestPoolsWithScore(network, {
+      ...preset,
+      topN: 50, // Get a larger set of pools to analyze
+    });
+
+    // Generate rebalance recommendations
+    const recommendations = generateRebalanceRecommendations(allPools, {
+      strategy: preset,
+      currentPositions: rebalanceDto.currentPositions,
+      availableLiquidity: rebalanceDto.availableLiquidity || 0,
+      minActionThreshold: rebalanceDto.minActionThreshold || 10,
+      maxPositions: rebalanceDto.maxPositions || 10,
+    });
+
+    return {
+      strategy,
+      recommendationsCount: recommendations.length,
+      recommendations,
+      marketConditions: {
+        timestamp: Date.now(),
+        network,
+        poolsAnalyzed: allPools.length,
+      },
     };
   }
 

@@ -236,8 +236,8 @@ async function mintNewPosition(params: MintPositionParams): Promise<string> {
     });
 
     // Use the position to get the optimal liquidity
-    const { amount0: amount0Optimal, amount1: amount1Optimal } = position.mintAmounts;
-
+    const { amount0: amount0Optimal, amount1: amount1Optimal } =
+      position.mintAmounts;
 
     // Calculate minimum amounts based on slippage tolerance
     // Use BigInt math to avoid overflow

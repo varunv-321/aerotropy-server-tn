@@ -26,6 +26,9 @@ AeroTropy Server is a NestJS-based backend that combines Uniswap V3 DeFi protoco
 - **Pool Analysis**: Get pools with APR calculations, volatility metrics, and performance trends
 - **Strategy-based Filtering**: Find the best pools based on predefined strategies (low, medium, high risk)
 - **Position Minting**: Create new liquidity positions through a REST API
+- **Position Sizing**: Get optimal position size recommendations based on risk profile
+- **Portfolio Rebalancing**: Receive actionable recommendations to optimize existing positions
+- **Token Correlation**: Analyze token pair correlations for improved diversification
 
 ### AI Agent
 
@@ -169,7 +172,7 @@ Mint a new Uniswap V3 liquidity position.
 }
 ```
 
-#### Remove Position (New!)
+#### Remove Position 
 
 ```
 POST /uniswap/v3/:network/remove-position
@@ -197,6 +200,130 @@ Remove liquidity from a Uniswap V3 position and optionally burn the NFT.
   "amount0Removed": "0.0998",
   "amount1Removed": "99.5",
   "positionBurned": false
+}
+```
+
+#### Get Position Sizing Recommendations (New!)
+
+```
+GET /uniswap/v3/:network/position-sizing/:strategy
+```
+
+Get optimal position size recommendations based on your risk profile and total investment amount.
+
+**Query Parameters:**
+
+- `investmentAmount` - Total investment amount in USD (required)
+- `maxPositions` - Maximum number of positions to recommend (optional)
+- `equalWeight` - Whether to use equal weighting or performance-weighted allocation (optional)
+
+**Response:**
+
+```json
+{
+  "strategy": "medium",
+  "totalInvestmentUSD": 10000,
+  "positions": [
+    {
+      "poolId": "0xPOOL_ADDRESS",
+      "token0": "ETH",
+      "token1": "USDC",
+      "feeTier": "3000",
+      "allocationPercentage": 40,
+      "allocationUSD": 4000,
+      "apr": 47.1,
+      "correlation": 0.9
+    },
+    {
+      "poolId": "0xPOOL_ADDRESS2",
+      "token0": "USDC",
+      "token1": "KTA",
+      "feeTier": "3000",
+      "allocationPercentage": 37,
+      "allocationUSD": 3700,
+      "apr": 52.0,
+      "correlation": 0.9
+    },
+    {...}
+  ]
+}
+```
+
+#### Portfolio Rebalancing (New!)
+
+```
+POST /uniswap/v3/:network/rebalance-portfolio/:strategy
+```
+
+Get rebalancing recommendations for your existing Uniswap V3 positions based on current market conditions and your risk profile.
+
+**Request Body:**
+
+```json
+{
+  "currentPositions": [
+    {
+      "poolId": "0xPOOL_ADDRESS",
+      "size": 5000,
+      "priceRange": {
+        "lowerPrice": 1.05,
+        "upperPrice": 1.25
+      },
+      "entryDate": 1683720000 
+    },
+    {...}
+  ],
+  "availableLiquidity": 2000,
+  "minActionThreshold": 10,
+  "maxPositions": 4
+}
+```
+
+**Response:**
+
+```json
+{
+  "strategy": "medium",
+  "recommendationsCount": 3,
+  "recommendations": [
+    {
+      "actionType": "adjust_range",
+      "poolId": "0xPOOL_ADDRESS",
+      "token0": "ETH",
+      "token1": "USDC",
+      "currentPriceRange": {
+        "lowerPrice": 1.05,
+        "upperPrice": 1.25
+      },
+      "recommendedPriceRange": {
+        "lowerPrice": 0.44,
+        "upperPrice": 1.55
+      },
+      "reasonCodes": ["range_inefficiency"],
+      "reasons": ["Position range is no longer optimal for current market conditions"],
+      "priority": 7
+    },
+    {
+      "actionType": "enter_position",
+      "poolId": "0xPOOL_ADDRESS2",
+      "token0": "USDC",
+      "token1": "KTA",
+      "targetSize": 1600,
+      "recommendedPriceRange": {
+        "lowerPrice": 0.05,
+        "upperPrice": 1.94
+      },
+      "reasonCodes": ["new_opportunity"],
+      "reasons": ["New high-performing pool (APR: 52.0%) aligned with medium risk profile"],
+      "priority": 5
+    },
+    {...}
+  ],
+  "marketConditions": {
+    "timestamp": 1683820000,
+    "network": "base",
+    "poolsAnalyzed": 50
+  }
 }
 ```
 
@@ -273,6 +400,26 @@ Remove all liquidity from my position #12345
 
 ```
 Close my position #6789 and burn the NFT
+```
+
+#### Position Sizing (New!)
+
+```
+I want to invest $10,000 in Uniswap pools with a medium risk profile
+```
+
+```
+What's the optimal allocation for $5,000 across low-risk pools?
+```
+
+#### Portfolio Rebalancing (New!)
+
+```
+I have $5,000 in ETH-USDC and $3,000 in WBTC-USDC pools. Should I rebalance my portfolio?
+```
+
+```
+Analyze my current positions and suggest improvements for a high-risk strategy
 ```
 
 #### Analytics Questions

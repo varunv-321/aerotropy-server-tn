@@ -3,12 +3,39 @@ const fetch = require('node-fetch');
 const testRebalancing = async () => {
   console.log('Testing rebalancing endpoint...');
   
-  // Test data - sample portfolio with positions
+  // First, fetch real pool data to get valid pool IDs
+  console.log('Fetching pool data to get real pool IDs...');
+  const poolsResponse = await fetch('http://localhost:3000/v1/uniswap/v3/base/pools-with-apr');
+  
+  if (!poolsResponse.ok) {
+    throw new Error(`Failed to get pools: ${poolsResponse.status} ${poolsResponse.statusText}`);
+  }
+  
+  const pools = await poolsResponse.json();
+  console.log(`Found ${pools.length} pools. Using real pool IDs for testing.`);
+  
+  // Find pools with specific tokens for better testing
+  const ethUsdcPool = pools.find(p => 
+    (p.token0.symbol === 'ETH' && p.token1.symbol === 'USDC') || 
+    (p.token0.symbol === 'USDC' && p.token1.symbol === 'ETH'));
+    
+  const btcPool = pools.find(p => 
+    p.token0.symbol === 'WBTC' || p.token1.symbol === 'WBTC' || 
+    p.token0.symbol === 'cbBTC' || p.token1.symbol === 'cbBTC');
+  
+  // Fallback to first pools if specific ones not found
+  const pool1 = ethUsdcPool || pools[0];
+  const pool2 = btcPool || (pools.length > 1 ? pools[1] : pools[0]);
+  
+  console.log(`Using pools:
+1. ${pool1.token0.symbol}-${pool1.token1.symbol} (ID: ${pool1.id})
+2. ${pool2.token0.symbol}-${pool2.token1.symbol} (ID: ${pool2.id})`);
+  
+  // Test data with real pool IDs
   const testData = {
     currentPositions: [
       {
-        // ETH-USDC pool
-        poolId: '0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640',
+        poolId: pool1.id,
         size: 5000,
         priceRange: {
           lowerPrice: 1.05,
@@ -17,8 +44,7 @@ const testRebalancing = async () => {
         entryDate: Math.floor(Date.now() / 1000) - (60 * 60 * 24 * 10) // 10 days ago
       },
       {
-        // WBTC-USDC pool
-        poolId: '0x99ac8ca7087fa4a2a1fb6357269965a2014abc35',
+        poolId: pool2.id,
         size: 3000,
         priceRange: {
           lowerPrice: 0.95,

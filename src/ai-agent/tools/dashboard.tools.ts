@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { tool } from 'ai';
-import { DashboardService } from '../../dashboard/dashboard.service';
 import { getDashboardService } from './service-registry';
 
 /**

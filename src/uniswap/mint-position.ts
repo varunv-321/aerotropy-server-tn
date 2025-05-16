@@ -240,7 +240,8 @@ async function mintNewPosition(params: MintPositionParams): Promise<string> {
     });
 
     // Get the optimal amounts from the position
-    const { amount0: amount0Optimal, amount1: amount1Optimal } = position.mintAmounts;
+    const { amount0: amount0Optimal, amount1: amount1Optimal } =
+      position.mintAmounts;
 
     // Convert to BigInt for calculations
     const amount0Desired = BigInt(amount0Optimal.toString());
@@ -460,7 +461,7 @@ async function main(): Promise<void> {
 // This would be used in your actual code
 export { mintNewPosition, approveToken, mintPositionWithPoolData };
 
-// Uncomment to run the example
-main().catch((error) => {
-  console.error('Unhandled error in main execution:', error);
-});
+// // Uncomment to run the example
+// main().catch((error) => {
+//   console.error('Unhandled error in main execution:', error);
+// });

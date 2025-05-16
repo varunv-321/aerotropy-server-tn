@@ -2,6 +2,11 @@ import { z } from 'zod';
 import { ethers } from 'ethers';
 import { POOL_ABI } from '../../contracts/abi/POOL_ABI';
 
+// RPC URL for Base Sepolia testnet
+const RPC_URL = process.env.BASE_SEPOLIA_RPC || 'https://sepolia.base.org';
+// Minimum balance required for gas fees (0.001 ETH)
+const MIN_BALANCE_FOR_GAS = ethers.parseEther('0.001');
+
 // Token addresses for supported tokens
 const TOKEN_ADDRESSES = {
   usdt: '0xdAC17F958D2ee523a2206206994597C13D831ec7', // USDT on Ethereum Mainnet
@@ -213,6 +218,33 @@ function parseInvestmentIntent(message: string): {
   };
 }
 
+/**
+ * Check if a wallet has enough balance for gas fees
+ * @param walletAddress The wallet address to check
+ * @returns An object with success flag and balance information
+ */
+async function checkWalletBalance(walletAddress: string) {
+  try {
+    const provider = new ethers.JsonRpcProvider(RPC_URL);
+    const balance = await provider.getBalance(walletAddress);
+
+    return {
+      success: balance >= MIN_BALANCE_FOR_GAS,
+      balance: balance.toString(),
+      formattedBalance: ethers.formatEther(balance),
+      minRequired: ethers.formatEther(MIN_BALANCE_FOR_GAS),
+      walletAddress,
+    };
+  } catch (error) {
+    console.error('Error checking wallet balance:', error);
+    return {
+      success: false,
+      error: 'Failed to check wallet balance',
+      walletAddress,
+    };
+  }
+}
+
 export const poolInvestmentTools = [
   {
     name: 'parseInvestmentRequest',
@@ -222,8 +254,18 @@ export const poolInvestmentTools = [
       message: z
         .string()
         .describe('User message text to parse for investment intent'),
+      walletAddress: z
+        .string()
+        .optional()
+        .describe('Optional wallet address to check balance'),
     }),
-    execute({ message }: { message: string }) {
+    async execute({
+      message,
+      walletAddress,
+    }: {
+      message: string;
+      walletAddress?: string;
+    }) {
       const result = parseInvestmentIntent(message);
 
       if (!result) {
@@ -243,6 +285,19 @@ export const poolInvestmentTools = [
         };
       }
 
+      // Check wallet balance if address is provided
+      if (walletAddress) {
+        const balanceCheck = await checkWalletBalance(walletAddress);
+
+        if (!balanceCheck.success) {
+          return {
+            success: false,
+            error: `Insufficient balance for gas fees. Your wallet address is ${walletAddress}, but it currently has a native balance of ${balanceCheck.formattedBalance || '0'} ETH. You need at least ${balanceCheck.minRequired || '0.001'} ETH for gas fees.`,
+            walletBalance: balanceCheck,
+          };
+        }
+      }
+
       const transaction = prepareInvestmentTransaction(
         result.poolRisk,
         result.tokenSymbol,
@@ -253,6 +308,9 @@ export const poolInvestmentTools = [
         success: true,
         params: result,
         transaction,
+        walletBalance: walletAddress
+          ? await checkWalletBalance(walletAddress)
+          : undefined,
       };
     },
   },
@@ -270,17 +328,58 @@ export const poolInvestmentTools = [
       amount: z
         .string()
         .describe('Amount to invest (in human-readable format)'),
+      walletAddress: z
+        .string()
+        .optional()
+        .describe('Optional wallet address to check balance'),
     }),
-    execute({
+    async execute({
       poolRisk,
       tokenSymbol,
       amount,
+      walletAddress,
     }: {
       poolRisk: 'low' | 'medium' | 'high';
       tokenSymbol: 'usdt' | 'usdc' | 'dai' | 'eth';
       amount: string;
+      walletAddress?: string;
     }) {
-      return prepareInvestmentTransaction(poolRisk, tokenSymbol, amount);
+      // Check wallet balance if address is provided
+      if (walletAddress) {
+        const balanceCheck = await checkWalletBalance(walletAddress);
+
+        if (!balanceCheck.success) {
+          return {
+            success: false,
+            error: `Insufficient balance for gas fees. Your wallet address is ${walletAddress}, but it currently has a native balance of ${balanceCheck.formattedBalance || '0'} ETH. You need at least ${balanceCheck.minRequired || '0.001'} ETH for gas fees.`,
+            walletBalance: balanceCheck,
+          };
+        }
+      }
+
+      const transaction = prepareInvestmentTransaction(
+        poolRisk,
+        tokenSymbol,
+        amount,
+      );
+
+      return {
+        success: true,
+        transaction,
+        walletBalance: walletAddress
+          ? await checkWalletBalance(walletAddress)
+          : undefined,
+      };
+    },
+  },
+  {
+    name: 'checkWalletBalance',
+    description: 'Check if a wallet has enough balance for gas fees',
+    parameters: z.object({
+      walletAddress: z.string().describe('The wallet address to check'),
+    }),
+    async execute({ walletAddress }: { walletAddress: string }) {
+      return await checkWalletBalance(walletAddress);
     },
   },
 ];

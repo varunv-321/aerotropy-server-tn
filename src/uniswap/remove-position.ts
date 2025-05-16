@@ -384,33 +384,33 @@ async function onlyCollectFees(tokenId: string): Promise<void> {
 }
 
 // Example usage
-async function main(): Promise<void> {
-  try {
-    // Replace with your actual position token ID
-    const tokenId = '21850';
-    const network = 'base-sepolia'; // Default network
+// async function main(): Promise<void> {
+//   try {
+//     // Replace with your actual position token ID
+//     const tokenId = '21850';
+//     const network = 'base-sepolia'; // Default network
 
-    // Example 1: Just collect fees
-    await onlyCollectFees(tokenId);
+//     // Example 1: Just collect fees
+//     await onlyCollectFees(tokenId);
 
-    // Example 2: Remove all liquidity but keep the NFT
-    // await closePosition(tokenId, network, false);
+//     // Example 2: Remove all liquidity but keep the NFT
+//     // await closePosition(tokenId, network, false);
 
-    // Example 3: Remove all liquidity and burn the NFT
-    await closePosition(tokenId, network, true);
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      console.error('Error in main execution:', error.message);
-    } else {
-      console.error('Unknown error in main execution:', error);
-    }
-  }
-}
+//     // Example 3: Remove all liquidity and burn the NFT
+//     await closePosition(tokenId, network, true);
+//   } catch (error: unknown) {
+//     if (error instanceof Error) {
+//       console.error('Error in main execution:', error.message);
+//     } else {
+//       console.error('Unknown error in main execution:', error);
+//     }
+//   }
+// }
 
 // Export functions for use in other modules
 export { removeLiquidity, collectFees, closePosition, onlyCollectFees };
 
-// Uncomment to run the example
-main().catch((error) => {
-  console.error('Unhandled error in main execution:', error);
-});
+// // Uncomment to run the example
+// main().catch((error) => {
+//   console.error('Unhandled error in main execution:', error);
+// });

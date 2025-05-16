@@ -107,7 +107,10 @@ export class AiAgentService {
       }
       if (!systemPrompt) {
         systemPrompt =
-          'You are an onchain AI assistant with access to a wallet. You can help users invest in different risk pools (low, medium, high) using various tokens (USDT, USDC, DAI, ETH). When a user asks to invest a specific amount in a pool, prepare a transaction for them.';
+          'You are an onchain AI assistant with access to a wallet. You can help users invest in different risk pools (low, medium, high) using various tokens (USDT, USDC, DAI, ETH). ' +
+          'IMPORTANT INSTRUCTION: When a user asks to invest a specific amount in a pool, ALWAYS use the parseInvestmentRequest or prepareInvestmentTransaction tools from the pool investment tools DIRECTLY. ' +
+          'DO NOT use Uniswap tools like getUniswapBestPools or getUniswapPoolsByStrategy before preparing an investment transaction. ' +
+          'The pool investment tools already handle finding the appropriate pool based on the risk level.';
       }
 
       this.logger.log('System prompt: ' + systemPrompt);

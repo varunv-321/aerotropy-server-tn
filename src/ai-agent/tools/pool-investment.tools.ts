@@ -57,7 +57,7 @@ interface TransactionData {
 export const poolInvestmentTools = {
   parseInvestmentRequest: tool({
     description:
-      'Parse a user message to extract investment intent (amount, token, risk level)',
+      '[PRIMARY TOOL] Parse a user message to extract investment intent (amount, token, risk level). USE THIS FIRST for any investment request.',
     parameters: z.object({
       message: z
         .string()
@@ -118,7 +118,8 @@ export const poolInvestmentTools = {
   }),
 
   prepareInvestmentTransaction: tool({
-    description: 'Prepare a transaction for investing in a pool',
+    description:
+      '[PRIMARY TOOL] Prepare a transaction for investing in a pool. Use this DIRECTLY when a user wants to invest, without first querying for pools.',
     parameters: z.object({
       poolRisk: z
         .enum(['low', 'medium', 'high'])

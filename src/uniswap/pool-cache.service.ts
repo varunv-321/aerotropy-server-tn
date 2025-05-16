@@ -209,4 +209,79 @@ export class PoolCacheService implements OnModuleInit {
 
     return result as Record<StrategyKey, number>;
   }
+
+  /**
+   * Get a comprehensive summary of all pool strategies
+   * This includes strategy descriptions, average APRs, and top pools for each strategy
+   */
+  async getPoolSummary(topN: number = 5) {
+    try {
+      this.logger.log(`Generating comprehensive pool summary with top ${topN} pools per strategy`);
+      
+      // Get all the strategy APRs
+      const aprs = await this.getAllStrategyAprs();
+      
+      // Helper function to create strategy description
+      const getStrategyDescription = (strategy: StrategyKey): string => {
+        switch (strategy) {
+          case 'low':
+            return 'Conservative strategy focusing on established pools with proven stability, high TVL, and consistent fees. Prioritizes lower volatility over APR.';
+          case 'medium':
+            return 'Balanced strategy that seeks moderate risk and return. Targets pools with good volume and reasonable APR while maintaining acceptable volatility.';
+          case 'high':
+            return 'Aggressive strategy that targets maximum APR and accepts higher volatility. Focuses on newer or more volatile pools with potential for higher returns.';
+        }
+      };
+
+      // Get pools for each strategy
+      const [lowPools, mediumPools, highPools] = await Promise.all([
+        this.getCachedPoolsByStrategy('low'),
+        this.getCachedPoolsByStrategy('medium'),
+        this.getCachedPoolsByStrategy('high'),
+      ]);
+      
+      // Helper function to get top N pools for a strategy sorted by APR
+      const getTopPools = (pools: PoolWithAPR[], count: number) => {
+        return pools
+          .filter(pool => pool.apr !== null)
+          .sort((a, b) => (b.apr || 0) - (a.apr || 0))
+          .slice(0, count);
+      };
+
+      // Build and return the summary object
+      return {
+        strategies: {
+          low: {
+            name: 'Low Risk Strategy',
+            description: getStrategyDescription('low'),
+            riskLevel: 'low',
+            averageApr: aprs.low,
+            poolCount: lowPools.length,
+            topPools: getTopPools(lowPools, topN),
+          },
+          medium: {
+            name: 'Medium Risk Strategy',
+            description: getStrategyDescription('medium'),
+            riskLevel: 'medium',
+            averageApr: aprs.medium,
+            poolCount: mediumPools.length,
+            topPools: getTopPools(mediumPools, topN),
+          },
+          high: {
+            name: 'High Risk Strategy',
+            description: getStrategyDescription('high'),
+            riskLevel: 'high',
+            averageApr: aprs.high,
+            poolCount: highPools.length,
+            topPools: getTopPools(highPools, topN),
+          },
+        },
+        timestamp: Date.now(),
+        lastUpdated: new Date().toISOString(),
+      };
+    } catch (error) {
+      this.logger.error(`Error generating pool summary: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
 }

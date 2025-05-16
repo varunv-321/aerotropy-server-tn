@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LoggerModule } from 'nestjs-pino';
+import { ScheduleModule } from '@nestjs/schedule';
 import { VaultModule } from './vault/vault.module';
 import { UniswapModule } from './uniswap/uniswap.module';
 import { GraphModule } from './graph/graph.module';
@@ -12,6 +13,7 @@ import { User } from './vault/entities/user/user';
 import { Deposit } from './vault/entities/deposit/deposit';
 import { AiAgentModule } from './ai-agent/ai-agent.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { PoolCache } from './uniswap/entities/pool-cache.entity';
 
 @Module({
   imports: [
@@ -35,18 +37,21 @@ import { DashboardModule } from './dashboard/dashboard.module';
       },
     }),
 
-    // TypeORM with PostgreSQL
+    // TypeORM with PostgreSQL - commented out for now until DB is set up
     // TypeOrmModule.forRootAsync({
     //   imports: [ConfigModule],
     //   useFactory: (configService: ConfigService) => ({
     //     type: 'postgres',
     //     url: configService.get<string>('DATABASE_URL'),
-    //     entities: [User, Deposit],
+    //     entities: [User, Deposit, PoolCache],
     //     synchronize: true, // Set to false in production, use migrations
     //     logging: ['error', 'warn'], // Log only errors and warnings
     //   }),
     //   inject: [ConfigService],
     // }),
+
+    // Schedule Module for cron jobs
+    ScheduleModule.forRoot(),
 
     // Feature modules
     VaultModule,

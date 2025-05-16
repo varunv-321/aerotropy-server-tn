@@ -45,7 +45,10 @@ export class DashboardService {
   constructor(private readonly poolCacheService: PoolCacheService) {
     // Initialize provider with the RPC URL (from environment variable)
     const rpcUrl = process.env.BASE_SEPOLIA_RPC || 'https://sepolia.base.org';
-    this.provider = new ethers.JsonRpcProvider(rpcUrl);
+    // Base Sepolia doesn't support ENS, set up provider with staticNetwork to avoid ENS lookups
+    this.provider = new ethers.JsonRpcProvider(rpcUrl, undefined, {
+      staticNetwork: true, // Prevents ENS lookups by treating the network as static
+    });
     this.logger.log(`Dashboard service initialized with RPC URL: ${rpcUrl}`);
   }
 
@@ -407,12 +410,17 @@ export class DashboardService {
         const riskStrategy = this.mapPoolToRiskStrategy(pool.name);
         if (riskStrategy) {
           // Get average APR by strategy
-          const aprData = await this.poolCacheService.getAverageAprByStrategy(riskStrategy);
+          const aprData =
+            await this.poolCacheService.getAverageAprByStrategy(riskStrategy);
           apr = aprData;
-          this.logger.log(`Got APR for ${pool.name} (${riskStrategy} risk): ${apr}%`);
+          this.logger.log(
+            `Got APR for ${pool.name} (${riskStrategy} risk): ${apr}%`,
+          );
         }
       } catch (aprError) {
-        this.logger.warn(`Failed to get APR for ${pool.name}: ${aprError.message}`);
+        this.logger.warn(
+          `Failed to get APR for ${pool.name}: ${aprError.message}`,
+        );
         // Don't let APR error fail the entire request
       }
 

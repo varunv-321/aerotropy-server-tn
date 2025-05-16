@@ -67,11 +67,13 @@ export class AiAgentController {
     this.logger.log(`Received streaming chat request: ${JSON.stringify(body)}`);
     try {
       const stream = await this.aiAgentService.chatStream(body);
-      // Send appropriate headers for streaming
+
+      // Set headers for streaming plain text
       res.setHeader('Content-Type', 'text/plain; charset=utf-8');
       res.setHeader('Transfer-Encoding', 'chunked');
+
       // Pipe the stream directly to the response
-      stream.pipeTextStreamToResponse(res);
+      stream.pipeDataStreamToResponse(res);
     } catch (err) {
       this.logger.error('AI agent streaming error', err);
       // If streaming hasn't started yet, we can send an error response

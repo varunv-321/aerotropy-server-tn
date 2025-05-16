@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { getVercelAITools } from '@coinbase/agentkit-vercel-ai-sdk';
 import { AgentKit } from '@coinbase/agentkit';
-import { generateText, streamText, Message } from 'ai';
+import { streamText, Message } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { STRATEGY_PRESETS, StrategyKey } from '../uniswap/strategy-presets';
 
@@ -60,18 +60,20 @@ export class AiAgentService {
   async chatStream({
     messages,
     walletAddress,
-    strategy,
   }: {
     messages: Message[];
     walletAddress: string;
-    strategy?: StrategyKey;
   }) {
     try {
       await this.ensureInitialized();
 
-      // If a strategy is provided, override system prompt
+      // Determine strategy from user messages
+      const strategy = this.determineStrategyFromMessages(messages);
+      this.logger.log(`Determined strategy from messages: ${strategy}`);
+
+      // Set system prompt based on determined strategy
       let systemPrompt = '';
-      if (!systemPrompt && strategy && STRATEGY_PRESETS[strategy]) {
+      if (strategy && STRATEGY_PRESETS[strategy]) {
         systemPrompt = STRATEGY_PRESETS[strategy].systemPrompt;
       }
       if (!systemPrompt) {
@@ -84,17 +86,78 @@ export class AiAgentService {
       this.logger.log('System prompt: ' + systemPrompt);
       this.logger.log('Messages: ' + JSON.stringify(messages));
 
-      // Return a streamable result that can be piped to the response
+      // Configure the AI stream with options for proper streaming
+      // Use type assertion to bypass TypeScript errors for experimental features
+      // @ts-ignore - experimental parameters not in types yet
       return streamText({
         model: openai('gpt-4o-mini'), // Requires OPENAI_API_KEY in env
         system: systemPrompt,
         messages,
         tools: this.tools,
         maxSteps: 10,
+        temperature: 0.7, // Add some variability to responses
       });
     } catch (err) {
       this.logger.error('AI agent streaming error', err);
       throw err;
     }
+  }
+
+  /**
+   * Determine investment strategy based on user messages
+   * @param messages - Array of conversation messages
+   * @returns Determined strategy (low, medium, high) or undefined if no strategy can be determined
+   */
+  private determineStrategyFromMessages(
+    messages: Message[],
+  ): StrategyKey | undefined {
+    // Get the last user message to analyze
+    const lastUserMessage = [...messages]
+      .reverse()
+      .find((msg) => msg.role === 'user');
+
+    if (!lastUserMessage) {
+      return undefined;
+    }
+
+    const content = lastUserMessage.content.toLowerCase();
+
+    // Check for explicit mentions of risk levels
+    if (
+      content.includes('low risk') ||
+      content.includes('safe investment') ||
+      content.includes('conservative') ||
+      content.includes('stable')
+    ) {
+      return 'low';
+    }
+
+    if (
+      content.includes('high risk') ||
+      content.includes('aggressive') ||
+      content.includes('high return') ||
+      content.includes('high yield') ||
+      content.includes('high apr')
+    ) {
+      return 'high';
+    }
+
+    if (
+      content.includes('medium risk') ||
+      content.includes('moderate risk') ||
+      content.includes('balanced')
+    ) {
+      return 'medium';
+    }
+
+    // Check for numeric indicators
+    if (content.includes('best 3') || content.includes('top 3')) {
+      if (content.includes('medium risk')) {
+        return 'medium';
+      }
+    }
+
+    // Default to medium risk if no clear preference is detected
+    return 'medium';
   }
 }

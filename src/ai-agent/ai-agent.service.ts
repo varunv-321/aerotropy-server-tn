@@ -25,13 +25,26 @@ export class AiAgentService {
     if (!this.tools) {
       const vercelTools = await getVercelAITools(this.agentKit);
       const { uniswapTools } = await import('./tools/uniswap.tools');
+      const { poolInvestmentTools } = await import(
+        './tools/pool-investment.tools'
+      );
+
       // Merge tools as an object (ToolSet), per Vercel AI SDK docs
       const uniswapToolsObject = Object.fromEntries(
         uniswapTools.map((tool) => [tool.name, tool]),
       );
-      this.tools = { ...vercelTools, ...uniswapToolsObject };
+
+      const poolInvestmentToolsObject = Object.fromEntries(
+        poolInvestmentTools.map((tool) => [tool.name, tool]),
+      );
+
+      this.tools = {
+        ...vercelTools,
+        ...uniswapToolsObject,
+        ...poolInvestmentToolsObject,
+      };
       this.logger.log(
-        'Vercel AI tools + Uniswap tools initialized. Tool count: ' +
+        'Vercel AI tools + Uniswap tools + Pool Investment tools initialized. Tool count: ' +
           Object.keys(this.tools).length,
       );
     }
@@ -62,7 +75,8 @@ export class AiAgentService {
       systemPrompt = STRATEGY_PRESETS[strategy].systemPrompt;
     }
     if (!systemPrompt) {
-      systemPrompt = 'You are an onchain AI assistant with access to a wallet.';
+      systemPrompt =
+        'You are an onchain AI assistant with access to a wallet. You can help users invest in different risk pools (low, medium, high) using various tokens (USDT, USDC, DAI, ETH). When a user asks to invest a specific amount in a pool, prepare a transaction for them.';
     }
     const { text } = await generateText({
       model: openai('gpt-4o-mini'), // Requires OPENAI_API_KEY in env
@@ -100,7 +114,8 @@ export class AiAgentService {
       systemPrompt = STRATEGY_PRESETS[strategy].systemPrompt;
     }
     if (!systemPrompt) {
-      systemPrompt = 'You are an onchain AI assistant with access to a wallet.';
+      systemPrompt =
+        'You are an onchain AI assistant with access to a wallet. You can help users invest in different risk pools (low, medium, high) using various tokens (USDT, USDC, DAI, ETH). When a user asks to invest a specific amount in a pool, prepare a transaction for them.';
     }
 
     // Return a streamable result that can be piped to the response

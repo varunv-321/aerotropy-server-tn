@@ -1,0 +1,286 @@
+import { z } from 'zod';
+import { ethers } from 'ethers';
+import { POOL_ABI } from '../../contracts/abi/POOL_ABI';
+
+// Token addresses for supported tokens
+const TOKEN_ADDRESSES = {
+  usdt: '0xdAC17F958D2ee523a2206206994597C13D831ec7', // USDT on Ethereum Mainnet
+  usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC on Ethereum Mainnet
+  dai: '0x6B175474E89094C44Da98b954EedeAC495271d0F', // DAI on Ethereum Mainnet
+  eth: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH on Ethereum Mainnet
+};
+
+// Pool contract addresses for different risk levels
+const POOL_ADDRESSES = {
+  low: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b', // Low risk pool address
+  medium: '0x2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1', // Medium risk pool address
+  high: '0x3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2', // High risk pool address
+};
+
+// Interface for transaction data
+interface TransactionData {
+  to: string; // Contract address
+  data: string; // Encoded function call
+  value: string; // ETH value (if any)
+}
+
+/**
+ * Prepare a transaction for investing in a pool
+ * @param poolRisk Risk level of the pool (low, medium, high)
+ * @param tokenSymbol Token symbol (usdt, usdc, dai, eth)
+ * @param amount Amount to invest
+ * @returns Transaction data that can be sent to the frontend
+ */
+function prepareInvestmentTransaction(
+  poolRisk: 'low' | 'medium' | 'high',
+  tokenSymbol: 'usdt' | 'usdc' | 'dai' | 'eth',
+  amount: string,
+): TransactionData {
+  try {
+    // Get pool address based on risk level
+    const poolAddress = POOL_ADDRESSES[poolRisk];
+    if (!poolAddress) {
+      throw new Error(`Pool with risk level ${poolRisk} not found`);
+    }
+
+    // Get token address
+    const tokenAddress = TOKEN_ADDRESSES[tokenSymbol];
+    if (!tokenAddress) {
+      throw new Error(`Token ${tokenSymbol} not supported`);
+    }
+
+    // Create contract interface
+    const poolInterface = new ethers.Interface(POOL_ABI);
+
+    // Determine token ID based on token symbol
+    // This is a placeholder - in a real implementation, you would need to get the actual token ID
+    // from the pool contract or a mapping
+    const tokenId = getTokenIdForPool(poolRisk, tokenSymbol);
+
+    // Convert amount to wei (based on token decimals)
+    const tokenDecimals = getTokenDecimals(tokenSymbol);
+    const amountInWei = ethers.parseUnits(amount, tokenDecimals);
+
+    // Encode the function call
+    // For ETH deposits, we need to use a different approach since ETH is not an ERC20 token
+    if (tokenSymbol === 'eth') {
+      // For ETH, we'll use the deposit function with value
+      const data = poolInterface.encodeFunctionData('deposit', [
+        tokenId,
+        amountInWei,
+        '0x0000000000000000000000000000000000000000', // Receiver (0x0 means sender)
+      ]);
+
+      return {
+        to: poolAddress,
+        data,
+        value: amountInWei.toString(), // ETH value to send
+      };
+    } else {
+      // For ERC20 tokens, we need to approve the token first (this would be a separate transaction)
+      // Then call the deposit function
+      const data = poolInterface.encodeFunctionData('deposit', [
+        tokenId,
+        amountInWei,
+        '0x0000000000000000000000000000000000000000', // Receiver (0x0 means sender)
+      ]);
+
+      return {
+        to: poolAddress,
+        data,
+        value: '0', // No ETH value for ERC20 tokens
+      };
+    }
+  } catch (error) {
+    console.error('Error preparing investment transaction:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get token ID for a specific pool and token
+ * This is a placeholder function - in a real implementation, you would need to get the actual token ID
+ * from the pool contract or a mapping
+ */
+function getTokenIdForPool(poolRisk: string, tokenSymbol: string): number {
+  // This is just a placeholder mapping
+  const tokenIdMap: Record<string, Record<string, number>> = {
+    low: {
+      usdt: 1,
+      usdc: 2,
+      dai: 3,
+      eth: 4,
+    },
+    medium: {
+      usdt: 5,
+      usdc: 6,
+      dai: 7,
+      eth: 8,
+    },
+    high: {
+      usdt: 9,
+      usdc: 10,
+      dai: 11,
+      eth: 12,
+    },
+  };
+
+  return tokenIdMap[poolRisk][tokenSymbol];
+}
+
+/**
+ * Get token decimals for a specific token
+ */
+function getTokenDecimals(tokenSymbol: string): number {
+  const decimalsMap: Record<string, number> = {
+    usdt: 6,
+    usdc: 6,
+    dai: 18,
+    eth: 18,
+  };
+
+  return decimalsMap[tokenSymbol];
+}
+
+// Export the tool for the AI agent
+/**
+ * Parse investment intent from natural language
+ * This function extracts investment parameters from a user message
+ * @param message User message text
+ * @returns Extracted investment parameters or null if not found
+ */
+function parseInvestmentIntent(message: string): {
+  amount: string;
+  tokenSymbol: 'usdt' | 'usdc' | 'dai' | 'eth' | null;
+  poolRisk: 'low' | 'medium' | 'high' | null;
+} | null {
+  // Convert message to lowercase for easier matching
+  const lowerMessage = message.toLowerCase();
+
+  // Extract amount using regex - looks for numbers followed by optional decimal
+  const amountMatch = lowerMessage.match(/\b(\d+(?:\.\d+)?)\b/);
+  const amount = amountMatch ? amountMatch[1] : null;
+
+  // Extract token symbol
+  let tokenSymbol: 'usdt' | 'usdc' | 'dai' | 'eth' | null = null;
+  if (lowerMessage.includes('usdt') || lowerMessage.includes('tether')) {
+    tokenSymbol = 'usdt';
+  } else if (
+    lowerMessage.includes('usdc') ||
+    lowerMessage.includes('usd coin')
+  ) {
+    tokenSymbol = 'usdc';
+  } else if (lowerMessage.includes('dai')) {
+    tokenSymbol = 'dai';
+  } else if (
+    lowerMessage.includes('eth') ||
+    lowerMessage.includes('ethereum')
+  ) {
+    tokenSymbol = 'eth';
+  }
+
+  // Extract pool risk level
+  let poolRisk: 'low' | 'medium' | 'high' | null = null;
+  if (
+    lowerMessage.includes('low risk') ||
+    lowerMessage.includes('safe') ||
+    lowerMessage.includes('conservative')
+  ) {
+    poolRisk = 'low';
+  } else if (
+    lowerMessage.includes('medium risk') ||
+    lowerMessage.includes('moderate') ||
+    lowerMessage.includes('balanced')
+  ) {
+    poolRisk = 'medium';
+  } else if (
+    lowerMessage.includes('high risk') ||
+    lowerMessage.includes('aggressive') ||
+    lowerMessage.includes('risky')
+  ) {
+    poolRisk = 'high';
+  }
+
+  // Return null if we couldn't extract all required parameters
+  if (!amount || !tokenSymbol || !poolRisk) {
+    return null;
+  }
+
+  return {
+    amount,
+    tokenSymbol,
+    poolRisk,
+  };
+}
+
+export const poolInvestmentTools = [
+  {
+    name: 'parseInvestmentRequest',
+    description:
+      'Parse a user message to extract investment intent (amount, token, risk level)',
+    parameters: z.object({
+      message: z
+        .string()
+        .describe('User message text to parse for investment intent'),
+    }),
+    execute({ message }: { message: string }) {
+      const result = parseInvestmentIntent(message);
+
+      if (!result) {
+        return {
+          success: false,
+          error: 'Could not extract investment parameters from the message',
+        };
+      }
+
+      // If we successfully parsed the investment intent, prepare the transaction
+      // We need to check that poolRisk and tokenSymbol are not null, even though our parseInvestmentIntent
+      // function already ensures this by returning null if any parameter is missing
+      if (result.poolRisk === null || result.tokenSymbol === null) {
+        return {
+          success: false,
+          error: 'Missing required parameters',
+        };
+      }
+
+      const transaction = prepareInvestmentTransaction(
+        result.poolRisk,
+        result.tokenSymbol,
+        result.amount,
+      );
+
+      return {
+        success: true,
+        params: result,
+        transaction,
+      };
+    },
+  },
+  {
+    name: 'prepareInvestmentTransaction',
+    description:
+      'Prepare a transaction for investing in a pool with a specific risk level using a supported token',
+    parameters: z.object({
+      poolRisk: z
+        .enum(['low', 'medium', 'high'])
+        .describe('Risk level of the pool (low, medium, high)'),
+      tokenSymbol: z
+        .enum(['usdt', 'usdc', 'dai', 'eth'])
+        .describe('Token symbol (usdt, usdc, dai, eth)'),
+      amount: z
+        .string()
+        .describe('Amount to invest (in human-readable format)'),
+    }),
+    execute({
+      poolRisk,
+      tokenSymbol,
+      amount,
+    }: {
+      poolRisk: 'low' | 'medium' | 'high';
+      tokenSymbol: 'usdt' | 'usdc' | 'dai' | 'eth';
+      amount: string;
+    }) {
+      return prepareInvestmentTransaction(poolRisk, tokenSymbol, amount);
+    },
+  },
+];

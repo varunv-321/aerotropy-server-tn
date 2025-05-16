@@ -102,7 +102,7 @@ async function mintNewPosition(params: MintPositionParams): Promise<string> {
     const network = params.network || 'base-sepolia';
     const tickLowerOffset = params.tickLowerOffset || 1000;
     const tickUpperOffset = params.tickUpperOffset || 1000;
-    const slippageTolerance = params.slippageTolerance || 0.5; // 0.5% default slippage tolerance
+    const slippageTolerance = params.slippageTolerance || 5.0; // 5.0% default slippage tolerance
 
     // Get network addresses
     const networkAddresses = NETWORK_ADDRESSES[network];
@@ -214,30 +214,44 @@ async function mintNewPosition(params: MintPositionParams): Promise<string> {
       `Adding liquidity with ${params.amount0} ${token0.symbol} and ${params.amount1} ${token1.symbol}`,
     );
 
-    const amount0Desired = BigInt(
+    // Parse user-provided amounts
+    const parsedAmount0 = BigInt(
       ethers.parseUnits(
         params.amount0,
         parseInt(params.poolData.token0.decimals),
       ),
     );
-    const amount1Desired = BigInt(
+    const parsedAmount1 = BigInt(
       ethers.parseUnits(
         params.amount1,
         parseInt(params.poolData.token1.decimals),
       ),
     );
 
-    // // Create Position instance
-    const position = new Position({
+    // Create Position instance with the maximum liquidity possible given the amounts
+    // First, calculate the liquidity based on the provided amounts
+    const position = Position.fromAmounts({
       pool: pool,
-      liquidity: 1, // Using number instead of bigint for SDK compatibility
       tickLower: tickLower,
       tickUpper: tickUpper,
+      amount0: parsedAmount0.toString(),
+      amount1: parsedAmount1.toString(),
+      useFullPrecision: true,
     });
 
-    // Use the position to get the optimal liquidity
-    const { amount0: amount0Optimal, amount1: amount1Optimal } =
-      position.mintAmounts;
+    // Get the optimal amounts from the position
+    const { amount0: amount0Optimal, amount1: amount1Optimal } = position.mintAmounts;
+
+    // Convert to BigInt for calculations
+    const amount0Desired = BigInt(amount0Optimal.toString());
+    const amount1Desired = BigInt(amount1Optimal.toString());
+
+    console.log(
+      `Optimal amount0: ${ethers.formatUnits(amount0Desired, parseInt(params.poolData.token0.decimals))} ${token0.symbol}`,
+    );
+    console.log(
+      `Optimal amount1: ${ethers.formatUnits(amount1Desired, parseInt(params.poolData.token1.decimals))} ${token1.symbol}`,
+    );
 
     // Calculate minimum amounts based on slippage tolerance
     // Use BigInt math to avoid overflow
@@ -247,6 +261,13 @@ async function mintNewPosition(params: MintPositionParams): Promise<string> {
     const amount0Min = (amount0Desired * slippageMultiplier) / BigInt(1000);
     const amount1Min = (amount1Desired * slippageMultiplier) / BigInt(1000);
 
+    console.log(
+      `Min amount0: ${ethers.formatUnits(amount0Min, parseInt(params.poolData.token0.decimals))} ${token0.symbol}`,
+    );
+    console.log(
+      `Min amount1: ${ethers.formatUnits(amount1Min, parseInt(params.poolData.token1.decimals))} ${token1.symbol}`,
+    );
+
     // Mint parameters
     const mintParams: MintParams = {
       token0: token0.address,
@@ -254,8 +275,8 @@ async function mintNewPosition(params: MintPositionParams): Promise<string> {
       fee: feeAmount,
       tickLower: tickLower,
       tickUpper: tickUpper,
-      amount0Desired: amount0Optimal.toString(),
-      amount1Desired: amount1Optimal.toString(),
+      amount0Desired: amount0Desired.toString(),
+      amount1Desired: amount1Desired.toString(),
       amount0Min: amount0Min.toString(),
       amount1Min: amount1Min.toString(),
       recipient: wallet.address,
@@ -392,8 +413,8 @@ async function mintPositionWithPoolData(poolData: PoolData): Promise<string> {
   // Example parameters for minting a position
   const params: MintPositionParams = {
     poolData,
-    amount0: '0.001', // Amount of token0 to add
-    amount1: '2', // Amount of token1 to add
+    amount0: '1', // Amount of token0 to add
+    amount1: '2000', // Amount of token1 to add
     tickLowerOffset: 1000, // Lower tick offset from current price
     tickUpperOffset: 1000, // Upper tick offset from current price
     network: 'base-sepolia', // Network to use

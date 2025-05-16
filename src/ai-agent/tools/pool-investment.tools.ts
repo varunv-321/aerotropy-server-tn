@@ -8,12 +8,32 @@ const RPC_URL = process.env.BASE_SEPOLIA_RPC || 'https://sepolia.base.org';
 // Minimum balance required for gas fees (0.001 ETH)
 const MIN_BALANCE_FOR_GAS = ethers.parseEther('0.001');
 
-// Token addresses for supported tokens
-const TOKEN_ADDRESSES = {
-  usdt: '0xdAC17F958D2ee523a2206206994597C13D831ec7', // USDT on Ethereum Mainnet
-  usdc: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC on Ethereum Mainnet
-  dai: '0x6B175474E89094C44Da98b954EedeAC495271d0F', // DAI on Ethereum Mainnet
-  eth: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH on Ethereum Mainnet
+// Token information for supported tokens
+const TOKENS = {
+  usdt: {
+    address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', // USDT on Ethereum Mainnet
+    decimals: 6,
+    name: 'Tether USD',
+    symbol: 'USDT',
+  },
+  usdc: {
+    address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC on Ethereum Mainnet
+    decimals: 6,
+    name: 'USD Coin',
+    symbol: 'USDC',
+  },
+  dai: {
+    address: '0x6B175474E89094C44Da98b954EedeAC495271d0F', // DAI on Ethereum Mainnet
+    decimals: 18,
+    name: 'Dai Stablecoin',
+    symbol: 'DAI',
+  },
+  eth: {
+    address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH on Ethereum Mainnet
+    decimals: 18,
+    name: 'Wrapped Ether',
+    symbol: 'WETH',
+  },
 };
 
 // Pool contract addresses for different risk levels
@@ -28,7 +48,132 @@ interface TransactionData {
   to: string; // Contract address
   data: string; // Encoded function call
   value: string; // ETH value (if any)
+  tokenAddress?: string; // Token address for ERC20 tokens (for approval)
+  tokenDecimals?: number; // Token decimals for UI formatting
+  tokenSymbol?: string; // Token symbol for UI display
 }
+
+// Export the tools for the AI agent
+export const poolInvestmentTools = {
+  parseInvestmentRequest: tool({
+    description:
+      'Parse a user message to extract investment intent (amount, token, risk level)',
+    parameters: z.object({
+      message: z
+        .string()
+        .describe('User message text to parse for investment intent'),
+      walletAddress: z
+        .string()
+        .optional()
+        .describe('Optional wallet address to check balance'),
+    }),
+    async execute({ message, walletAddress }) {
+      const result = parseInvestmentIntent(message);
+
+      if (!result) {
+        return {
+          success: false,
+          error: 'Could not extract investment parameters from the message',
+        };
+      }
+
+      // If we successfully parsed the investment intent, prepare the transaction
+      // We need to check that poolRisk and tokenSymbol are not null, even though our parseInvestmentIntent
+      // function already ensures this by returning null if any parameter is missing
+      if (result.poolRisk === null || result.tokenSymbol === null) {
+        return {
+          success: false,
+          error: 'Missing required parameters',
+        };
+      }
+
+      // Check wallet balance if address is provided
+      if (walletAddress) {
+        const balanceCheck = await checkWalletBalance(walletAddress);
+
+        if (!balanceCheck.success) {
+          return {
+            success: false,
+            error: `Insufficient balance for gas fees. Your wallet address is ${walletAddress}, but it currently has a native balance of ${balanceCheck.formattedBalance || '0'} ETH. You need at least ${balanceCheck.minRequired || '0.001'} ETH for gas fees.`,
+            walletBalance: balanceCheck,
+          };
+        }
+      }
+
+      const transaction = prepareInvestmentTransaction(
+        result.poolRisk,
+        result.tokenSymbol,
+        result.amount,
+      );
+
+      return {
+        success: true,
+        params: result,
+        transaction,
+        walletBalance: walletAddress
+          ? await checkWalletBalance(walletAddress)
+          : undefined,
+      };
+    },
+  }),
+
+  prepareInvestmentTransaction: tool({
+    description: 'Prepare a transaction for investing in a pool',
+    parameters: z.object({
+      poolRisk: z
+        .enum(['low', 'medium', 'high'])
+        .describe('Risk level of the pool to invest in'),
+      tokenSymbol: z
+        .enum(['usdt', 'usdc', 'dai', 'eth'])
+        .describe('Token symbol to invest with'),
+      amount: z.string().describe('Amount to invest as a string'),
+      walletAddress: z
+        .string()
+        .optional()
+        .describe('Optional wallet address to check balance'),
+    }),
+    async execute({ poolRisk, tokenSymbol, amount, walletAddress }) {
+      // Check wallet balance if address is provided
+      if (walletAddress) {
+        const balanceCheck = await checkWalletBalance(walletAddress);
+
+        if (!balanceCheck.success) {
+          return {
+            success: false,
+            error: `Insufficient balance for gas fees. Your wallet address is ${walletAddress}, but it currently has a native balance of ${balanceCheck.formattedBalance || '0'} ETH. You need at least ${balanceCheck.minRequired || '0.001'} ETH for gas fees.`,
+            walletBalance: balanceCheck,
+          };
+        }
+      }
+
+      const transaction = prepareInvestmentTransaction(
+        poolRisk,
+        tokenSymbol,
+        amount,
+      );
+
+      return {
+        success: true,
+        transaction,
+        walletBalance: walletAddress
+          ? await checkWalletBalance(walletAddress)
+          : undefined,
+      };
+    },
+  }),
+
+  checkWalletBalance: tool({
+    description: 'Check if a wallet has enough balance for gas fees',
+    parameters: z.object({
+      walletAddress: z.string().describe('The wallet address to check'),
+    }),
+    async execute({ walletAddress }) {
+      return await checkWalletBalance(walletAddress);
+    },
+  }),
+};
+
+// Helper functions
 
 /**
  * Prepare a transaction for investing in a pool
@@ -49,11 +194,12 @@ function prepareInvestmentTransaction(
       throw new Error(`Pool with risk level ${poolRisk} not found`);
     }
 
-    // Get token address
-    const tokenAddress = TOKEN_ADDRESSES[tokenSymbol];
-    if (!tokenAddress) {
+    // Get token information
+    const token = TOKENS[tokenSymbol];
+    if (!token) {
       throw new Error(`Token ${tokenSymbol} not supported`);
     }
+    const tokenAddress = token.address;
 
     // Create contract interface
     const poolInterface = new ethers.Interface(POOL_ABI);
@@ -64,7 +210,7 @@ function prepareInvestmentTransaction(
     const tokenId = getTokenIdForPool(poolRisk, tokenSymbol);
 
     // Convert amount to wei (based on token decimals)
-    const tokenDecimals = getTokenDecimals(tokenSymbol);
+    const tokenDecimals = token.decimals;
     const amountInWei = ethers.parseUnits(amount, tokenDecimals);
 
     // Encode the function call
@@ -91,10 +237,15 @@ function prepareInvestmentTransaction(
         '0x0000000000000000000000000000000000000000', // Receiver (0x0 means sender)
       ]);
 
+      // Note: The frontend would need to handle the ERC20 approval transaction separately
+      // before executing this transaction
       return {
         to: poolAddress,
         data,
         value: '0', // No ETH value for ERC20 tokens
+        tokenAddress: token.address, // Include the token address for approval transaction
+        tokenDecimals: token.decimals, // Include decimals for UI formatting
+        tokenSymbol: token.symbol, // Include symbol for UI display
       };
     }
   } catch (error) {
@@ -133,28 +284,6 @@ function getTokenIdForPool(poolRisk: string, tokenSymbol: string): number {
 
   return tokenIdMap[poolRisk][tokenSymbol];
 }
-
-/**
- * Get token decimals for a specific token
- */
-function getTokenDecimals(tokenSymbol: string): number {
-  const decimalsMap: Record<string, number> = {
-    usdt: 6,
-    usdc: 6,
-    dai: 18,
-    eth: 18,
-  };
-
-  return decimalsMap[tokenSymbol];
-}
-
-// Export the tool for the AI agent
-/**
- * Parse investment intent from natural language
- * This function extracts investment parameters from a user message
- * @param message User message text
- * @returns Extracted investment parameters or null if not found
- */
 function parseInvestmentIntent(message: string): {
   amount: string;
   tokenSymbol: 'usdt' | 'usdc' | 'dai' | 'eth' | null;
@@ -245,142 +374,3 @@ async function checkWalletBalance(walletAddress: string) {
     };
   }
 }
-
-export const poolInvestmentTools = [
-  {
-    name: 'parseInvestmentRequest',
-    description:
-      'Parse a user message to extract investment intent (amount, token, risk level)',
-    parameters: z.object({
-      message: z
-        .string()
-        .describe('User message text to parse for investment intent'),
-      walletAddress: z
-        .string()
-        .optional()
-        .describe('Optional wallet address to check balance'),
-    }),
-    async execute({
-      message,
-      walletAddress,
-    }: {
-      message: string;
-      walletAddress?: string;
-    }) {
-      const result = parseInvestmentIntent(message);
-
-      if (!result) {
-        return {
-          success: false,
-          error: 'Could not extract investment parameters from the message',
-        };
-      }
-
-      // If we successfully parsed the investment intent, prepare the transaction
-      // We need to check that poolRisk and tokenSymbol are not null, even though our parseInvestmentIntent
-      // function already ensures this by returning null if any parameter is missing
-      if (result.poolRisk === null || result.tokenSymbol === null) {
-        return {
-          success: false,
-          error: 'Missing required parameters',
-        };
-      }
-
-      // Check wallet balance if address is provided
-      if (walletAddress) {
-        const balanceCheck = await checkWalletBalance(walletAddress);
-
-        if (!balanceCheck.success) {
-          return {
-            success: false,
-            error: `Insufficient balance for gas fees. Your wallet address is ${walletAddress}, but it currently has a native balance of ${balanceCheck.formattedBalance || '0'} ETH. You need at least ${balanceCheck.minRequired || '0.001'} ETH for gas fees.`,
-            walletBalance: balanceCheck,
-          };
-        }
-      }
-
-      const transaction = prepareInvestmentTransaction(
-        result.poolRisk,
-        result.tokenSymbol,
-        result.amount,
-      );
-
-      return {
-        success: true,
-        params: result,
-        transaction,
-        walletBalance: walletAddress
-          ? await checkWalletBalance(walletAddress)
-          : undefined,
-      };
-    },
-  },
-  {
-    name: 'prepareInvestmentTransaction',
-    description:
-      'Prepare a transaction for investing in a pool with a specific risk level using a supported token',
-    parameters: z.object({
-      poolRisk: z
-        .enum(['low', 'medium', 'high'])
-        .describe('Risk level of the pool (low, medium, high)'),
-      tokenSymbol: z
-        .enum(['usdt', 'usdc', 'dai', 'eth'])
-        .describe('Token symbol (usdt, usdc, dai, eth)'),
-      amount: z
-        .string()
-        .describe('Amount to invest (in human-readable format)'),
-      walletAddress: z
-        .string()
-        .optional()
-        .describe('Optional wallet address to check balance'),
-    }),
-    async execute({
-      poolRisk,
-      tokenSymbol,
-      amount,
-      walletAddress,
-    }: {
-      poolRisk: 'low' | 'medium' | 'high';
-      tokenSymbol: 'usdt' | 'usdc' | 'dai' | 'eth';
-      amount: string;
-      walletAddress?: string;
-    }) {
-      // Check wallet balance if address is provided
-      if (walletAddress) {
-        const balanceCheck = await checkWalletBalance(walletAddress);
-
-        if (!balanceCheck.success) {
-          return {
-            success: false,
-            error: `Insufficient balance for gas fees. Your wallet address is ${walletAddress}, but it currently has a native balance of ${balanceCheck.formattedBalance || '0'} ETH. You need at least ${balanceCheck.minRequired || '0.001'} ETH for gas fees.`,
-            walletBalance: balanceCheck,
-          };
-        }
-      }
-
-      const transaction = prepareInvestmentTransaction(
-        poolRisk,
-        tokenSymbol,
-        amount,
-      );
-
-      return {
-        success: true,
-        transaction,
-        walletBalance: walletAddress
-          ? await checkWalletBalance(walletAddress)
-          : undefined,
-      };
-    },
-  },
-  {
-    name: 'checkWalletBalance',
-    description: 'Check if a wallet has enough balance for gas fees',
-    parameters: z.object({
-      walletAddress: z.string().describe('The wallet address to check'),
-    }),
-    async execute({ walletAddress }: { walletAddress: string }) {
-      return await checkWalletBalance(walletAddress);
-    },
-  },
-];

@@ -59,21 +59,17 @@ export class AiAgentService {
     }
     if (!this.tools && this.agentKit) {
       // AgentKit must be initialized before getting tools
-      const vercelTools = await getVercelAITools(this.agentKit);
+      const vercelTools = getVercelAITools(this.agentKit);
       const { uniswapTools } = await import('./tools/uniswap.tools');
       const { poolInvestmentTools } = await import(
         './tools/pool-investment.tools'
       );
       const { walletTools } = await import('./tools/wallet.tools');
 
-      const poolInvestmentToolsObject = Object.fromEntries(
-        poolInvestmentTools.map((tool: any) => [tool.name, tool]),
-      );
-
       this.tools = {
         ...vercelTools,
         ...uniswapTools,
-        ...poolInvestmentToolsObject,
+        ...poolInvestmentTools,
         ...walletTools,
       };
       this.logger.log(

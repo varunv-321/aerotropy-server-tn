@@ -25,6 +25,10 @@ import {
   RemovePositionDto,
   RemovePositionResponseDto,
 } from './dto/remove-position.dto';
+import {
+  RebalancePortfolioDto,
+  RebalancePortfolioResponseDto,
+} from './dto/rebalance-portfolio.dto';
 import { STRATEGY_PRESETS, StrategyKey } from './strategy-presets';
 
 @ApiTags('Uniswap V3')
@@ -273,6 +277,173 @@ export class UniswapController {
       opts.maxPoolAgeDays = 3;
     }
     return this.uniswapService.getBestPoolsWithScore(network, opts);
+  }
+
+  /**
+   * Get position sizing recommendations for a strategy
+   * GET /uniswap/v3/:network/position-sizing/:strategy
+   */
+  @Get(':network/position-sizing/:strategy')
+  @ApiOperation({
+    summary: 'Get position sizing recommendations for a specific strategy',
+    description:
+      'Returns optimal position sizes for pools based on risk profile (low, medium, high) and investment amount.',
+  })
+  @ApiParam({ name: 'network', required: true })
+  @ApiParam({
+    name: 'strategy',
+    required: true,
+    enum: ['low', 'medium', 'high'],
+  })
+  @ApiQuery({
+    name: 'investmentAmount',
+    required: true,
+    description: 'Total investment amount in USD',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'maxPositions',
+    required: false,
+    description: 'Maximum number of positions to recommend',
+    type: Number,
+  })
+  @ApiQuery({
+    name: 'equalWeight',
+    required: false,
+    description: 'Whether to distribute investment equally among positions',
+    type: Boolean,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Position size recommendations for the chosen strategy.',
+  })
+  async getPositionSizing(
+    @Param('network') network: string,
+    @Param('strategy') strategy: StrategyKey,
+    @Query('investmentAmount') investmentAmount: string,
+    @Query('maxPositions') maxPositions?: string,
+    @Query('equalWeight') equalWeight?: string,
+  ) {
+    // Import position sizing utility
+    const { calculatePositionSizes } = await import('./position-sizing.utils');
+
+    // Validate investment amount
+    const totalInvestmentUSD = Number(investmentAmount);
+    if (isNaN(totalInvestmentUSD) || totalInvestmentUSD <= 0) {
+      throw new BadRequestException(
+        'Investment amount must be a positive number',
+      );
+    }
+
+    // Get strategy preset
+    const preset = STRATEGY_PRESETS[strategy] || STRATEGY_PRESETS.low;
+
+    // Get pools based on strategy
+    const pools = await this.uniswapService.getBestPoolsWithScore(network, {
+      ...preset,
+      topN: maxPositions ? Number(maxPositions) : 10,
+    });
+
+    // Calculate position sizes
+    const positionSizes = calculatePositionSizes(pools, {
+      totalInvestmentUSD,
+      equalWeight: equalWeight === 'true',
+      strategy: preset,
+    });
+
+    // Enrich the response with pool details
+    const poolsMap = new Map(pools.map((pool) => [pool.id, pool]));
+
+    return {
+      strategy,
+      totalInvestmentUSD,
+      positions: positionSizes.map((position) => {
+        const pool = poolsMap.get(position.poolId);
+        return {
+          ...position,
+          token0: pool?.token0.symbol,
+          token1: pool?.token1.symbol,
+          feeTier: pool?.feeTier,
+          apr: pool?.apr,
+          correlation: pool?.correlation,
+        };
+      }),
+    };
+  }
+
+  /**
+   * Get position rebalancing recommendations
+   * POST /uniswap/v3/:network/rebalance-portfolio/:strategy
+   */
+  @Post(':network/rebalance-portfolio/:strategy')
+  @ApiOperation({
+    summary: 'Get position rebalancing recommendations',
+    description:
+      'Analyzes existing positions and market conditions to recommend optimal rebalancing actions.',
+  })
+  @ApiParam({ name: 'network', required: true })
+  @ApiParam({
+    name: 'strategy',
+    required: true,
+    enum: ['low', 'medium', 'high'],
+  })
+  @ApiBody({
+    type: RebalancePortfolioDto,
+    description: 'Current portfolio positions and parameters for rebalancing',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Position rebalancing recommendations',
+    type: RebalancePortfolioResponseDto,
+  })
+  async getRebalancingRecommendations(
+    @Param('network') network: string,
+    @Param('strategy') strategy: StrategyKey,
+    @Body() rebalanceDto: RebalancePortfolioDto,
+  ): Promise<RebalancePortfolioResponseDto> {
+    // Import rebalancing utilities
+    const { generateRebalanceRecommendations } = await import(
+      './position-rebalance.utils'
+    );
+
+    // Validate input
+    if (
+      !rebalanceDto.currentPositions ||
+      !Array.isArray(rebalanceDto.currentPositions)
+    ) {
+      throw new BadRequestException(
+        'Current positions must be provided as an array',
+      );
+    }
+
+    // Get strategy preset
+    const preset = STRATEGY_PRESETS[strategy] || STRATEGY_PRESETS.low;
+
+    // Get all potential pools based on strategy
+    const allPools = await this.uniswapService.getBestPoolsWithScore(network, {
+      ...preset,
+      topN: 50, // Get a larger set of pools to analyze
+    });
+
+    // Generate rebalance recommendations
+    const recommendations = generateRebalanceRecommendations(allPools, {
+      strategy: preset,
+      currentPositions: rebalanceDto.currentPositions,
+      availableLiquidity: rebalanceDto.availableLiquidity || 0,
+      minActionThreshold: rebalanceDto.minActionThreshold || 10,
+      maxPositions: rebalanceDto.maxPositions || 10,
+    });
+
+    return {
+      strategy,
+      recommendationsCount: recommendations.length,
+      recommendations,
+      marketConditions: {
+        timestamp: Date.now(),
+        network,
+        poolsAnalyzed: allPools.length,
+      },
+    };
   }
 
   /**

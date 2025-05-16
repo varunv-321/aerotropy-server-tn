@@ -34,6 +34,8 @@ export interface PoolWithAPR extends Pool {
   tvlTrend?: number | null; // Percent change in TVL over window
   volumeTrend?: number | null; // Percent change in volume over window
   tvlSlope?: number | null; // Regression slope of TVL
+  createdAtTimestamp?: string; // Timestamp when the pool was created
+  correlation?: number; // Token correlation score
   volumeSlope?: number | null; // Regression slope of volume
   score?: number; // Composite investment score
   sharpeRatio?: number | null; // Risk-adjusted return (APR volatility)
@@ -244,9 +246,22 @@ export class UniswapService {
   async getBestPoolsWithScore(
     network: string,
     options?: {
+      // Basic filtering parameters
       minTVL?: number; // Minimum TVL in USD
       minAPR?: number; // Minimum APR in %
       topN?: number; // Return top N pools
+      maxPoolAgeDays?: number; // Maximum age of pool in days (for new pools)
+      preferredFeeTiers?: number[]; // Preferred fee tiers in basis points
+
+      // Token correlation parameters
+      minTokenCorrelation?: number; // Minimum correlation coefficient
+      maxTokenCorrelation?: number; // Maximum correlation coefficient
+      correlationWeight?: number; // Weight for token correlation in scoring
+      preferStableCorrelation?: boolean; // Whether to prefer stable pairs
+      preferStableBase?: boolean; // Whether to prefer pairs with one stable
+      avoidExoticPairs?: boolean; // Whether to avoid exotic pairs
+
+      // Scoring weights
       aprWeight?: number; // Weight for APR in score
       tvlWeight?: number; // Weight for TVL in score
       volatilityWeight?: number; // Weight for volatility (aprStdDev, negative)
@@ -256,21 +271,44 @@ export class UniswapService {
     },
     version?: number,
   ): Promise<PoolWithAPR[]> {
+    // Import token correlation utilities
     const {
+      calculateTokenCorrelation,
+      meetsCorrelationCriteria,
+      isPreferredFeeTier,
+    } = await import('./token-correlation.utils');
+
+    const {
+      // Basic filtering parameters
       minTVL = 100000,
       minAPR = 0,
       topN = 10,
+      maxPoolAgeDays,
+      preferredFeeTiers,
+
+      // Token correlation parameters
+      minTokenCorrelation = 0,
+      maxTokenCorrelation = 1,
+      correlationWeight = 0,
+      preferStableCorrelation = false,
+      preferStableBase = false,
+      avoidExoticPairs = false,
+
+      // Scoring weights
       aprWeight = 0.4,
       tvlWeight = 0.2,
       volatilityWeight = 0.2, // negative weight (penalize volatility)
-      tvlTrendWeight = 0.1, // reward positive TVL trend
-      volumeTrendWeight = 0.1, // reward positive volume trend
+      tvlTrendWeight = 0.1, // positive weight
+      volumeTrendWeight = 0.1, // positive weight
+      historyDays = 7,
     } = options || {};
+
     const pools = await this.getUniswapPoolsWithAPR(
       network,
-      options?.historyDays ?? 7,
+      historyDays,
       version,
     );
+
     if (!pools.length) return [];
 
     // Normalization helpers
@@ -292,13 +330,54 @@ export class UniswapService {
     const normalize = (val: number, min: number, max: number) =>
       max > min ? (val - min) / (max - min) : 0;
 
+    // Calculate correlations for all pools to use in normalization
+    const correlations = pools.map((pool) =>
+      calculateTokenCorrelation(pool, {
+        preferStableCorrelation,
+        preferStableBase,
+        avoidExoticPairs,
+      }),
+    );
+    const minCorrelation = Math.min(...correlations);
+    const maxCorrelation = Math.max(...correlations);
+
     // Filter and score
     const filtered = pools
-      .filter(
-        (p) =>
-          (p.apr ?? 0) >= minAPR && parseFloat(p.totalValueLockedUSD) >= minTVL,
-      )
+      .filter((p) => {
+        // Basic filtering criteria
+        const meetsBasicCriteria =
+          (p.apr ?? 0) >= minAPR && parseFloat(p.totalValueLockedUSD) >= minTVL;
+
+        // Pool age filtering if specified
+        // Skip age filtering if createdAtTimestamp is null/undefined
+        const meetsAgeRequirement =
+          !maxPoolAgeDays ||
+          !p.createdAtTimestamp ||
+          (Date.now() / 1000 - parseInt(p.createdAtTimestamp)) /
+            (60 * 60 * 24) <=
+            maxPoolAgeDays;
+
+        // Fee tier filtering if specified
+        const meetsFeeRequirement = isPreferredFeeTier(p, preferredFeeTiers);
+
+        // Token correlation filtering
+        const meetsCorrelationRequirements = meetsCorrelationCriteria(p, {
+          minTokenCorrelation,
+          maxTokenCorrelation,
+          preferStableCorrelation,
+          preferStableBase,
+          avoidExoticPairs,
+        });
+
+        return (
+          meetsBasicCriteria &&
+          meetsAgeRequirement &&
+          meetsFeeRequirement &&
+          meetsCorrelationRequirements
+        );
+      })
       .map((p) => {
+        // Standard metrics normalization
         const aprNorm = normalize(p.apr ?? 0, minApr, maxApr);
         const tvlNorm = normalize(
           parseFloat(p.totalValueLockedUSD),
@@ -317,13 +396,47 @@ export class UniswapService {
           minVolumeTrend,
           maxVolumeTrend,
         );
+
+        // Calculate correlation score
+        const correlation = calculateTokenCorrelation(p, {
+          preferStableCorrelation,
+          preferStableBase,
+          avoidExoticPairs,
+        });
+        const correlationNorm = normalize(
+          correlation,
+          minCorrelation,
+          maxCorrelation,
+        );
+
+        // Calculate composite score with correlation
+        // Note: The actual weights should add up to 1.0
+        // If correlationWeight is non-zero, other weights need to be scaled accordingly
+        const weightSum =
+          aprWeight +
+          tvlWeight +
+          volatilityWeight +
+          tvlTrendWeight +
+          volumeTrendWeight +
+          Math.abs(correlationWeight);
+
+        const weightAdjustment =
+          correlationWeight !== 0
+            ? (1 - Math.abs(correlationWeight)) / weightSum
+            : 1;
+
         const score =
-          aprNorm * aprWeight +
-          tvlNorm * tvlWeight +
-          volNorm * volatilityWeight +
-          tvlTrendNorm * tvlTrendWeight +
-          volumeTrendNorm * volumeTrendWeight;
-        return { ...p, score };
+          aprNorm * aprWeight * weightAdjustment +
+          tvlNorm * tvlWeight * weightAdjustment +
+          volNorm * volatilityWeight * weightAdjustment +
+          tvlTrendNorm * tvlTrendWeight * weightAdjustment +
+          volumeTrendNorm * volumeTrendWeight * weightAdjustment +
+          // Note: correlationWeight can be negative to prefer exotic pairs
+          (correlationWeight >= 0
+            ? correlationNorm * correlationWeight
+            : (1 - correlationNorm) * Math.abs(correlationWeight));
+
+        return { ...p, score, correlation };
       })
       .sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
 

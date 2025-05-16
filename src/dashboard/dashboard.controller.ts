@@ -83,4 +83,48 @@ export class DashboardController {
       address: POOL_ADDRESSES[index],
     });
   }
+
+  /**
+   * Get token supplies for all pools
+   */
+  @ApiOperation({ summary: 'Get token supplies for all pools' })
+  @ApiResponse({
+    status: 200,
+    description: 'Pool token supplies retrieved successfully',
+  })
+  @Get('supplies')
+  async getPoolTokenSupplies() {
+    this.logger.log('Getting token supplies for all pools');
+    return this.dashboardService.getPoolTokenSupplies();
+  }
+
+  /**
+   * Get token supplies for a specific pool
+   */
+  @ApiOperation({ summary: 'Get token supplies for a specific pool' })
+  @ApiQuery({
+    name: 'poolIndex',
+    description: 'Index of the pool (0: High Growth, 1: Balanced, 2: Stable)',
+    example: '0',
+    required: false,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Pool token supplies retrieved successfully',
+  })
+  @Get('supplies/pool')
+  async getPoolTokenSupply(@Query('poolIndex') poolIndex: string) {
+    const index = parseInt(poolIndex || '0');
+    this.logger.log(`Getting token supplies for pool index: ${index}`);
+    
+    return this.dashboardService.getPoolTokenSupply({
+      name:
+        index === 0
+          ? 'High Growth Pool'
+          : index === 1
+            ? 'Balanced Growth Pool'
+            : 'Stable Growth Pool',
+      address: POOL_ADDRESSES[index],
+    });
+  }
 }

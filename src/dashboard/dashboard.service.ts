@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ethers } from 'ethers';
 import { POOLS, Pool } from '../common/utils/pool.constants';
 import { TOKENS, StandardToken } from '../common/utils/token.constants';
+import { PoolCacheService } from '../uniswap/pool-cache.service';
 
 // Import the ABI from the specified location
 import { POOL_ABI } from '../contracts/abi/POOL_ABI';
@@ -19,6 +20,21 @@ export type UserPoolBalance = {
   pool: Pool;
   tokenBalances: UserTokenBalance[];
   totalValueUSD?: string; // Sum of all token values in USD
+  apr?: number; // Annual percentage return for the pool
+};
+
+// Define type for pool token supply data
+export type PoolTokenSupply = {
+  pool: Pool;
+  tokenSupplies: {
+    token: StandardToken;
+    totalSupply: string; // Human-readable total supply with proper decimals
+    rawSupply: string; // Raw supply in wei/smallest unit
+    formattedSupply: string; // Supply with symbol, e.g., '10.5 USDC'
+    valueUSD?: string; // Estimated value in USD (if available)
+  }[];
+  totalValueUSD?: string; // Sum of all token values in USD
+  apr?: number; // Annual percentage return for the pool
 };
 
 @Injectable()
@@ -26,7 +42,7 @@ export class DashboardService {
   private readonly logger = new Logger(DashboardService.name);
   private provider: ethers.JsonRpcProvider;
 
-  constructor() {
+  constructor(private readonly poolCacheService: PoolCacheService) {
     // Initialize provider with the RPC URL (from environment variable)
     const rpcUrl = process.env.BASE_SEPOLIA_RPC || 'https://sepolia.base.org';
     this.provider = new ethers.JsonRpcProvider(rpcUrl);
@@ -42,6 +58,26 @@ export class DashboardService {
    * Helper method to convert BigInt values to strings in objects for JSON serialization
    * This recursively processes objects and arrays to convert any BigInt to string
    */
+  /**
+   * Maps pool names to risk strategies for APR lookup
+   */
+  private mapPoolToRiskStrategy(
+    poolName: string,
+  ): 'low' | 'medium' | 'high' | undefined {
+    const lowerName = poolName.toLowerCase();
+
+    if (lowerName.includes('stable') || lowerName.includes('low')) {
+      return 'low';
+    } else if (lowerName.includes('balanced') || lowerName.includes('medium')) {
+      return 'medium';
+    } else if (lowerName.includes('high') || lowerName.includes('growth')) {
+      return 'high';
+    }
+
+    // If no match, return undefined
+    return undefined;
+  }
+
   private convertBigIntToString(obj: any): any {
     if (obj === null || obj === undefined) {
       return obj;
@@ -137,11 +173,33 @@ export class DashboardService {
         totalValueUSD = total.toFixed(2);
       }
 
+      // Get APR data from the pool cache service
+      let apr: number | undefined;
+      try {
+        // Map pool names to risk strategies
+        const riskStrategy = this.mapPoolToRiskStrategy(pool.name);
+        if (riskStrategy) {
+          // Get average APR by strategy
+          const aprData =
+            await this.poolCacheService.getAverageAprByStrategy(riskStrategy);
+          apr = aprData;
+          this.logger.log(
+            `Got APR for ${pool.name} (${riskStrategy} risk): ${apr}%`,
+          );
+        }
+      } catch (aprError) {
+        this.logger.warn(
+          `Failed to get APR for ${pool.name}: ${aprError.message}`,
+        );
+        // Don't let APR error fail the entire request
+      }
+
       // Convert BigInt values to strings for JSON serialization
       return this.convertBigIntToString({
         pool,
         tokenBalances,
         totalValueUSD,
+        apr,
       });
     } catch (error) {
       this.logger.error(
@@ -248,5 +306,133 @@ export class DashboardService {
 
     const value = parseFloat(amount) * price;
     return value.toFixed(2);
+  }
+
+  /**
+   * Get token supplies for all pools
+   * @returns Array of pool supplies with token supply data for each pool
+   */
+  async getPoolTokenSupplies(): Promise<PoolTokenSupply[]> {
+    try {
+      this.logger.log('Getting token supplies for all pools');
+
+      // Get supplies for each pool
+      const poolSupplies = await Promise.all(
+        POOLS.map((pool) => this.getPoolTokenSupply(pool)),
+      );
+
+      // Convert BigInt values to strings for JSON serialization
+      return this.convertBigIntToString(poolSupplies);
+    } catch (error) {
+      this.logger.error(
+        `Error getting pool token supplies: ${error.message}`,
+        error.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Get token supplies for a specific pool
+   * @param pool The pool to check token supplies in
+   * @returns Pool supplies with token supply data
+   */
+  async getPoolTokenSupply(pool: Pool): Promise<PoolTokenSupply> {
+    try {
+      this.logger.log(`Getting token supplies for pool: ${pool.name}`);
+
+      // Create contract instance
+      const contract = new ethers.Contract(
+        pool.address,
+        POOL_ABI,
+        this.provider,
+      );
+
+      // Get token supplies for all tokens in the pool
+      const tokenSupplies = await Promise.all(
+        TOKENS.map(async (token) => {
+          try {
+            // Call totalSupply() on the contract for this token
+            const rawSupply = await contract.totalSupply(token.tokenId);
+
+            // Format the raw balance to a human-readable format with proper decimals
+            const totalSupply = ethers.formatUnits(
+              rawSupply,
+              token.decimals || 18,
+            );
+
+            // Format with token symbol
+            const formattedSupply = `${totalSupply} ${token.symbol}`;
+
+            // Get token price to calculate USD value (if applicable)
+            const valueUSD = this.calculateUSDValue(totalSupply, token.symbol);
+
+            return {
+              token,
+              totalSupply,
+              rawSupply: rawSupply.toString(),
+              formattedSupply,
+              valueUSD,
+            };
+          } catch (tokenError) {
+            this.logger.warn(
+              `Error getting supply for ${token.symbol} in pool ${pool.name}: ${tokenError.message}`,
+            );
+            // Return token with zero balance rather than failing completely
+            return {
+              token,
+              totalSupply: '0',
+              rawSupply: '0',
+              formattedSupply: `0 ${token.symbol}`,
+            };
+          }
+        }),
+      );
+
+      // Calculate total USD value if token prices are available
+      let totalValueUSD;
+      const tokensWithUSD = tokenSupplies.filter((t) => t.valueUSD);
+      if (tokensWithUSD.length > 0) {
+        const total = tokensWithUSD.reduce(
+          (sum, t) => sum + parseFloat(t.valueUSD || '0'),
+          0,
+        );
+        totalValueUSD = total.toFixed(2);
+      }
+
+      // Get APR data from the pool cache service
+      let apr: number | undefined;
+      try {
+        // Map pool names to risk strategies
+        const riskStrategy = this.mapPoolToRiskStrategy(pool.name);
+        if (riskStrategy) {
+          // Get average APR by strategy
+          const aprData = await this.poolCacheService.getAverageAprByStrategy(riskStrategy);
+          apr = aprData;
+          this.logger.log(`Got APR for ${pool.name} (${riskStrategy} risk): ${apr}%`);
+        }
+      } catch (aprError) {
+        this.logger.warn(`Failed to get APR for ${pool.name}: ${aprError.message}`);
+        // Don't let APR error fail the entire request
+      }
+
+      // Return result with pool info and token supplies
+      return {
+        pool,
+        tokenSupplies,
+        totalValueUSD,
+        apr,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error getting token supplies for ${pool.name}: ${error.message}`,
+        error.stack,
+      );
+      // Return empty supplies rather than failing completely
+      return {
+        pool,
+        tokenSupplies: [],
+      };
+    }
   }
 }

@@ -1,8 +1,18 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
-import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { PoolCacheService } from './pool-cache.service';
 import { StrategyKey } from './strategy-presets';
 import { PoolWithAPR } from './uniswap.service';
+import { serviceRegistry } from '../ai-agent/tools/service-registry';
+
+// Import the DashboardService type for type checking
+import { DashboardService } from '../dashboard/dashboard.service';
 
 // Define interfaces for the detailed pool information
 interface TokenDetails {
@@ -26,13 +36,24 @@ interface PoolDetails {
   volume7d?: string;
 }
 
+interface TokenAllocation {
+  symbol: string;
+  name: string;
+  address: string;
+  totalSupply: string;
+  formattedSupply: string;
+  valueUSD: string;
+  logoUrl: string;
+}
+
 interface StrategyDetails {
   name: string;
   description: string;
-  riskLevel: string;
+  riskLevel: StrategyKey;
   averageApr: number;
   poolCount: number;
   topPools: PoolDetails[];
+  tokenAllocation: TokenAllocation[];
 }
 
 interface PoolSummary {
@@ -149,38 +170,165 @@ export class PoolCacheController {
       this.poolCacheService.getCachedPoolsByStrategy('high'),
     ]);
 
+    // Get the dashboard service from the registry if available (for token supplies)
+    let dashboardService;
+    try {
+      dashboardService = serviceRegistry.getService(
+        'dashboardService',
+      ) as DashboardService;
+    } catch (error) {
+      console.warn('Dashboard service not available for token supply data');
+    }
+
     // Get the top N pools for each strategy sorted by APR
-    const getTopPools = (
+    const getTopPools = async (
       pools: PoolWithAPR[],
       count: number,
-    ): PoolDetails[] => {
-      return pools
+    ): Promise<PoolDetails[]> => {
+      // Get the top pools sorted by APR
+      const topPools = pools
         .filter((pool) => pool.apr !== null)
         .sort((a, b) => (b.apr || 0) - (a.apr || 0))
-        .slice(0, count)
-        .map((pool) => ({
-          id: pool.id,
-          token0: {
-            symbol: pool.token0.symbol,
-            name: pool.token0.name,
-            address: pool.token0.id,
-          },
-          token1: {
-            symbol: pool.token1.symbol,
-            name: pool.token1.name,
-            address: pool.token1.id,
-          },
-          feeTier: pool.feeTier,
-          apr: pool.apr,
-          tvl: pool.totalValueLockedUSD,
-          volatility: pool.aprStdDev !== null ? pool.aprStdDev : undefined,
-          sharpeRatio: pool.sharpeRatio !== null ? pool.sharpeRatio : undefined,
-          // Add volume metrics if available (using poolDayData if needed)
-          volume7d: pool.averageVolume7d
-            ? pool.averageVolume7d.toString()
-            : undefined,
-        }));
+        .slice(0, count);
+
+      // Create the base pool details without token supplies
+      const poolDetails = topPools.map((pool) => ({
+        id: pool.id,
+        token0: {
+          symbol: pool.token0.symbol,
+          name: pool.token0.name,
+          address: pool.token0.id,
+        } as TokenDetails,
+        token1: {
+          symbol: pool.token1.symbol,
+          name: pool.token1.name,
+          address: pool.token1.id,
+        } as TokenDetails,
+        feeTier: pool.feeTier,
+        apr: pool.apr,
+        tvl: pool.totalValueLockedUSD,
+        volatility: pool.aprStdDev !== null ? pool.aprStdDev : undefined,
+        sharpeRatio: pool.sharpeRatio !== null ? pool.sharpeRatio : undefined,
+        // Add volume metrics if available (using poolDayData if needed)
+        volume7d: pool.averageVolume7d
+          ? pool.averageVolume7d.toString()
+          : undefined,
+      }));
+
+      // If dashboard service is available, add token supply information
+      if (dashboardService) {
+        try {
+          // For each pool, try to get token supplies
+          const poolDetailsWithSupplies = await Promise.all(
+            poolDetails.map(async (poolDetail) => {
+              try {
+                // Create a pool object with name and address for the dashboard service
+                // We'll use the pool ID as the address since that's the pool contract address
+                const poolObject = {
+                  name: `${poolDetail.token0.symbol}/${poolDetail.token1.symbol} ${poolDetail.feeTier}`,
+                  address: poolDetail.id,
+                };
+
+                // Get token supplies for this pool
+                const poolSupply =
+                  await dashboardService.getPoolTokenSupply(poolObject);
+
+                // Find the token supplies for token0 and token1
+                const token0Supply = poolSupply.tokenSupplies.find(
+                  (t) => t.token.symbol === poolDetail.token0.symbol,
+                );
+                const token1Supply = poolSupply.tokenSupplies.find(
+                  (t) => t.token.symbol === poolDetail.token1.symbol,
+                );
+
+                // We no longer need to add token supply to individual pool tokens
+                // since we have a comprehensive tokenAllocation at the strategy level
+
+                return poolDetail;
+              } catch (error) {
+                console.error(
+                  `Error adding token supplies for pool ${poolDetail.id}:`,
+                  error,
+                );
+                return poolDetail; // Return original pool detail if error
+              }
+            }),
+          );
+
+          return poolDetailsWithSupplies;
+        } catch (error) {
+          console.error('Error adding token supplies to pool details:', error);
+          return poolDetails; // Return original pool details if error
+        }
+      }
+
+      // If no dashboard service, return the original pool details
+      return poolDetails;
     };
+
+    // Function to generate token allocations for all standard tokens
+    const calculateTokenAllocations = async (): Promise<TokenAllocation[]> => {
+      // Import our standard tokens from constants
+      const { TOKENS } = await import('../common/utils/token.constants');
+
+      // Initialize token allocations with default values
+      const tokenAllocations: TokenAllocation[] = TOKENS.map((token) => ({
+        symbol: token.symbol,
+        name: token.name,
+        address: token.address,
+        totalSupply: '0',
+        formattedSupply: `0 ${token.symbol}`,
+        valueUSD: '0',
+        logoUrl: token.logo,
+      }));
+
+      // If dashboard service is available, try to get actual supply data
+      if (dashboardService) {
+        try {
+          // Get pool token supplies from dashboard service
+          const poolSupplies = await dashboardService.getPoolTokenSupplies();
+
+          // Update our token allocations with actual data
+          for (const poolSupply of poolSupplies) {
+            for (const tokenSupply of poolSupply.tokenSupplies) {
+              // Find matching token in our allocations
+              const matchingToken = tokenAllocations.find(
+                (t) =>
+                  t.symbol.toLowerCase() ===
+                  tokenSupply.token.symbol.toLowerCase(),
+              );
+
+              if (matchingToken) {
+                // Add to total supply (convert to number, add, then back to string)
+                const currentSupply =
+                  parseFloat(matchingToken.totalSupply) || 0;
+                const additionalSupply =
+                  parseFloat(tokenSupply.totalSupply) || 0;
+                const newTotalSupply = currentSupply + additionalSupply;
+
+                matchingToken.totalSupply = newTotalSupply.toString();
+                matchingToken.formattedSupply = `${newTotalSupply.toLocaleString()} ${matchingToken.symbol}`;
+
+                // Add to USD value
+                const currentValueUSD = parseFloat(matchingToken.valueUSD) || 0;
+                const additionalValueUSD =
+                  parseFloat(tokenSupply.valueUSD) || 0;
+                matchingToken.valueUSD = (
+                  currentValueUSD + additionalValueUSD
+                ).toString();
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error calculating token allocations:', error);
+        }
+      }
+
+      return tokenAllocations;
+    };
+
+    // Get token allocations for all standard tokens
+    const tokenAllocations = await calculateTokenAllocations();
 
     // Build the response object
     const summary: PoolSummary = {
@@ -191,7 +339,8 @@ export class PoolCacheController {
           riskLevel: 'low',
           averageApr: aprs.low,
           poolCount: lowPools.length,
-          topPools: getTopPools(lowPools, topN),
+          topPools: await getTopPools(lowPools, topN),
+          tokenAllocation: tokenAllocations,
         },
         medium: {
           name: 'Medium Risk Strategy',
@@ -199,7 +348,8 @@ export class PoolCacheController {
           riskLevel: 'medium',
           averageApr: aprs.medium,
           poolCount: mediumPools.length,
-          topPools: getTopPools(mediumPools, topN),
+          topPools: await getTopPools(mediumPools, topN),
+          tokenAllocation: tokenAllocations,
         },
         high: {
           name: 'High Risk Strategy',
@@ -207,7 +357,8 @@ export class PoolCacheController {
           riskLevel: 'high',
           averageApr: aprs.high,
           poolCount: highPools.length,
-          topPools: getTopPools(highPools, topN),
+          topPools: await getTopPools(highPools, topN),
+          tokenAllocation: tokenAllocations,
         },
       },
       timestamp: Date.now(),

@@ -12,11 +12,12 @@ You can:
 2. Recommend pools based on user risk preferences (low, medium, high risk) using cached data for faster and more comprehensive responses
 3. Prepare investment transactions for different risk pools (low, medium, high) using various tokens (USDT, USDC, DAI, ETH)
 4. View user token balances across all pools to help inform investment decisions
-5. Calculate the current USD value of tokens using real-time price data
-6. Explain DeFi concepts like impermanent loss, concentrated liquidity, and fee tiers
-7. Mint new liquidity positions directly on Uniswap based on user instructions
-8. Access pre-filtered pool data by risk strategy (low, medium, high) from cache for faster responses
-9. Compare APRs across different risk strategies using cached data
+5. View total token supplies and liquidity in pools to analyze market depth and pool size
+6. Calculate the current USD value of tokens using real-time price data
+7. Explain DeFi concepts like impermanent loss, concentrated liquidity, and fee tiers
+8. Mint new liquidity positions directly on Uniswap based on user instructions
+9. Access pre-filtered pool data by risk strategy (low, medium, high) from cache for faster responses
+10. Compare APRs across different risk strategies using cached data
 
 ## Tools at Your Disposal
 
@@ -44,6 +45,8 @@ You can:
 
 - **getUserBalances** - View a user's token balances across all pools
 - **getUserPoolBalance** - View a user's token balances in a specific pool
+- **getPoolTokenSupplies** - View total token supplies and liquidity across all pools
+- **getPoolTokenSupply** - View total token supplies and liquidity in a specific pool
 
 ## Guidelines for Interaction
 

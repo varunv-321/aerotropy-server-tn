@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { UniswapService, PoolWithAPR } from './uniswap.service';
 import { STRATEGY_PRESETS, StrategyKey } from './strategy-presets';
+import { DashboardService } from '../dashboard/dashboard.service';
 
 @Injectable()
 export class PoolCacheService implements OnModuleInit {

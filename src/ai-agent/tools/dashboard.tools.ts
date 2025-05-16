@@ -124,4 +124,104 @@ export const dashboardTools = {
       }
     },
   }),
+
+  /**
+   * Get token supplies across all pools
+   */
+  getPoolTokenSupplies: tool({
+    description:
+      'Get total token supplies across all pools. Use this when the user asks about total liquidity in pools, pool sizes, or how much of each token is in each pool.',
+    parameters: z.object({}), // Empty parameters object since this tool doesn't require any inputs
+    execute: async () => {
+      // Get the dashboard service from the registry
+      const dashboardService = getDashboardService();
+      if (!dashboardService) {
+        console.error('Dashboard service not found in tool context');
+        return {
+          success: false,
+          error: 'Dashboard service not available',
+        };
+      }
+      try {
+        const poolSupplies = await dashboardService.getPoolTokenSupplies();
+
+        // Extract relevant data for a cleaner response
+        const formattedData = poolSupplies.map((pool) => ({
+          poolName: pool.pool.name,
+          tokens: pool.tokenSupplies.map((token) => ({
+            symbol: token.token.symbol,
+            totalSupply: token.totalSupply,
+            formattedSupply: token.formattedSupply,
+            valueUSD: token.valueUSD,
+          })),
+          totalValueUSD: pool.totalValueUSD,
+          apr: pool.apr !== undefined ? `${pool.apr.toFixed(2)}%` : 'Unknown',
+        }));
+
+        return { success: true, poolSupplies: formattedData };
+      } catch (error) {
+        console.error('Error getting pool token supplies:', error);
+        return { success: false, error: error.message };
+      }
+    },
+  }),
+
+  /**
+   * Get token supplies for a specific pool
+   */
+  getPoolTokenSupply: tool({
+    description:
+      'Get token supplies for a specific pool. Use this when the user asks about the size of a specific pool or how much of each token is in a specific pool.',
+    parameters: z.object({
+      poolIndex: z
+        .number()
+        .describe('Index of the pool (0: High Growth, 1: Balanced, 2: Stable)'),
+    }),
+    execute: async ({ poolIndex }) => {
+      // Get the dashboard service from the registry
+      const dashboardService = getDashboardService();
+      if (!dashboardService) {
+        console.error('Dashboard service not found in tool context');
+        return {
+          success: false,
+          error: 'Dashboard service not available',
+        };
+      }
+      try {
+        // Import pools from constants
+        const { POOLS } = await import('../../common/utils/pool.constants');
+
+        if (poolIndex < 0 || poolIndex >= POOLS.length) {
+          return {
+            success: false,
+            error: `Invalid pool index. Must be between 0 and ${POOLS.length - 1}`,
+          };
+        }
+
+        const pool = POOLS[poolIndex];
+        const poolSupply = await dashboardService.getPoolTokenSupply(pool);
+
+        // Format the response for cleaner output
+        const formattedData = {
+          poolName: poolSupply.pool.name,
+          tokens: poolSupply.tokenSupplies.map((token) => ({
+            symbol: token.token.symbol,
+            totalSupply: token.totalSupply,
+            formattedSupply: token.formattedSupply,
+            valueUSD: token.valueUSD,
+          })),
+          totalValueUSD: poolSupply.totalValueUSD,
+          apr:
+            poolSupply.apr !== undefined
+              ? `${poolSupply.apr.toFixed(2)}%`
+              : 'Unknown',
+        };
+
+        return { success: true, poolSupply: formattedData };
+      } catch (error) {
+        console.error('Error getting pool token supply:', error);
+        return { success: false, error: error.message };
+      }
+    },
+  }),
 };

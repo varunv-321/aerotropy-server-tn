@@ -11,25 +11,25 @@ const MIN_BALANCE_FOR_GAS = ethers.parseEther('0.001');
 // Token information for supported tokens
 const TOKENS = {
   usdt: {
-    address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', // USDT on Ethereum Mainnet
+    address: '0xa91e0f6d622108a97df116A6eA5b5687034Fb39e', // USDT on Ethereum Mainnet
     decimals: 6,
-    name: 'Tether USD',
+    name: 'USDT',
     symbol: 'USDT',
   },
   usdc: {
-    address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC on Ethereum Mainnet
+    address: '0x54e98382b0e5E1260a6C458Ea38ACB2f5Fc5c705', // USDC on Ethereum Mainnet
     decimals: 6,
     name: 'USD Coin',
     symbol: 'USDC',
   },
   dai: {
-    address: '0x6B175474E89094C44Da98b954EedeAC495271d0F', // DAI on Ethereum Mainnet
+    address: '0x16f869dc5BfE8dfB239BDd2774876f3daDD934cD', // DAI on Ethereum Mainnet
     decimals: 18,
-    name: 'Dai Stablecoin',
+    name: 'DAI',
     symbol: 'DAI',
   },
   eth: {
-    address: '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // WETH on Ethereum Mainnet
+    address: '0x0FF4C36AD67d4E64A903F59070a76e0Bf836E7db', // WETH on Ethereum Mainnet
     decimals: 18,
     name: 'Wrapped Ether',
     symbol: 'WETH',
@@ -38,9 +38,9 @@ const TOKENS = {
 
 // Pool contract addresses for different risk levels
 const POOL_ADDRESSES = {
-  low: '0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b', // Low risk pool address
-  medium: '0x2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1', // Medium risk pool address
-  high: '0x3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2', // High risk pool address
+  low: '0x8a4dd22bcd307fca80db7eefb090e430badccf7f', // Low risk pool address
+  medium: '0x265e2068955685c3676ea1c075257ab0bf5148b4', // Medium risk pool address
+  high: '0x1527b9f572C49EC1D9240D66a882A2AaACceC8f8', // High risk pool address
 };
 
 // Interface for transaction data
@@ -115,7 +115,7 @@ export const poolInvestmentTools = {
 
   prepareInvestmentTransaction: tool({
     description:
-      '[PRIMARY TOOL] Prepare a transaction for investing in a pool. Use this DIRECTLY when a user wants to invest, without first querying for pools.',
+      '[MUST USE DIRECTLY] This is the PRIMARY tool for investment requests. When a user asks to invest an amount in a pool, use this tool IMMEDIATELY without any wallet checks or pool queries. NO wallet connection is required.',
     parameters: z.object({
       poolRisk: z
         .enum(['low', 'medium', 'high'])

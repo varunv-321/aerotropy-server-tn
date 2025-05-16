@@ -86,13 +86,14 @@ export class AiAgentService {
       const { dashboardTools } = await import('./tools/dashboard.tools');
       const { poolCacheTools } = await import('./tools/pool-cache.tools');
 
+      // Put pool investment tools first to ensure they're prioritized
       this.tools = {
+        ...poolInvestmentTools, // Prioritize pool investment tools
         ...vercelTools,
-        ...uniswapTools,
-        ...poolInvestmentTools,
-        ...walletTools,
         ...dashboardTools,
         ...poolCacheTools,
+        ...uniswapTools, // Lower priority for Uniswap tools
+        ...walletTools, // Lowest priority for wallet tools
       };
       this.logger.log(
         'Vercel AI tools + Uniswap tools + Pool Investment tools + Wallet tools + Dashboard tools + Pool Cache tools initialized. Tool count: ' +
@@ -130,9 +131,11 @@ export class AiAgentService {
       if (!systemPrompt) {
         systemPrompt =
           'You are an onchain AI assistant with access to a wallet. You can help users invest in different risk pools (low, medium, high) using various tokens (USDT, USDC, DAI, ETH). ' +
-          'IMPORTANT INSTRUCTION: When a user asks to invest a specific amount in a pool, ALWAYS use the parseInvestmentRequest or prepareInvestmentTransaction tools from the pool investment tools DIRECTLY. ' +
+          'CRITICAL INSTRUCTION: When a user asks to invest a specific amount in a pool, you MUST IMMEDIATELY use the prepareInvestmentTransaction tool from pool-investment.tools.ts with the appropriate parameters. ' +
+          'For example, if a user says "invest 500 USDT in medium risk pool", you MUST use prepareInvestmentTransaction with poolRisk="medium", tokenSymbol="usdt", amount="500". ' +
           'DO NOT use Uniswap tools like getUniswapBestPools or getUniswapPoolsByStrategy before preparing an investment transaction. ' +
           'DO NOT use the connectWallet tool for pool investments - the pool investment tools do not require wallet connection and will work without it. ' +
+          'DO NOT ask the user to connect their wallet for pool investments - just directly return the transaction data from prepareInvestmentTransaction. ' +
           'The pool investment tools already handle finding the appropriate pool based on the risk level.';
       }
 

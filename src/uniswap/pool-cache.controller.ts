@@ -51,6 +51,7 @@ interface StrategyDetails {
   description: string;
   riskLevel: StrategyKey;
   averageApr: number;
+  aprRange: string; // Text representation of APR range for this risk level
   poolCount: number;
   topPools: PoolDetails[];
   tokenAllocation: TokenAllocation[];
@@ -335,27 +336,33 @@ export class PoolCacheController {
       strategies: {
         low: {
           name: 'Low Risk Strategy',
-          description: this.strategyDescriptions.low,
+          description:
+            'Conservative strategy focusing on established pools with proven stability, high TVL, and consistent fees. Prioritizes lower volatility over APR.',
           riskLevel: 'low',
           averageApr: aprs.low,
+          aprRange: '15% to 25%',
           poolCount: lowPools.length,
           topPools: await getTopPools(lowPools, topN),
           tokenAllocation: tokenAllocations,
         },
         medium: {
           name: 'Medium Risk Strategy',
-          description: this.strategyDescriptions.medium,
+          description:
+            'Balanced strategy that seeks moderate risk and return. Targets pools with good volume and reasonable APR while maintaining acceptable volatility.',
           riskLevel: 'medium',
           averageApr: aprs.medium,
+          aprRange: '25% to 50%',
           poolCount: mediumPools.length,
           topPools: await getTopPools(mediumPools, topN),
           tokenAllocation: tokenAllocations,
         },
         high: {
           name: 'High Risk Strategy',
-          description: this.strategyDescriptions.high,
+          description:
+            'Aggressive strategy that targets maximum APR and accepts higher volatility. Focuses on newer or more volatile pools with potential for higher returns.',
           riskLevel: 'high',
           averageApr: aprs.high,
+          aprRange: '50% and above',
           poolCount: highPools.length,
           topPools: await getTopPools(highPools, topN),
           tokenAllocation: tokenAllocations,

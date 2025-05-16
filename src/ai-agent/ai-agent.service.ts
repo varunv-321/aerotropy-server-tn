@@ -7,6 +7,8 @@ import { STRATEGY_PRESETS, StrategyKey } from '../uniswap/strategy-presets';
 import { ViemWalletProvider } from '@coinbase/agentkit';
 import { baseSepolia, base } from 'viem/chains';
 import { createWalletClient, http } from 'viem';
+import { DashboardService } from '../dashboard/dashboard.service';
+import { serviceRegistry } from './tools/service-registry';
 
 @Injectable()
 export class AiAgentService {
@@ -14,6 +16,12 @@ export class AiAgentService {
   private tools: any = null;
   private currentWalletAddress: string | null = null;
   private readonly logger = new Logger(AiAgentService.name);
+
+  constructor(private readonly dashboardService: DashboardService) {
+    // Register the dashboard service in the service registry for tools to access
+    serviceRegistry.registerService('dashboardService', this.dashboardService);
+    this.logger.log('Dashboard service registered in the service registry');
+  }
 
   /**
    * Ensure AgentKit and tools are initialized with the correct wallet address
@@ -65,15 +73,17 @@ export class AiAgentService {
         './tools/pool-investment.tools'
       );
       const { walletTools } = await import('./tools/wallet.tools');
+      const { dashboardTools } = await import('./tools/dashboard.tools');
 
       this.tools = {
         ...vercelTools,
         ...uniswapTools,
         ...poolInvestmentTools,
         ...walletTools,
+        ...dashboardTools,
       };
       this.logger.log(
-        'Vercel AI tools + Uniswap tools + Pool Investment tools + Wallet tools initialized. Tool count: ' +
+        'Vercel AI tools + Uniswap tools + Pool Investment tools + Wallet tools + Dashboard tools initialized. Tool count: ' +
           Object.keys(this.tools).length,
       );
     }
@@ -118,6 +128,8 @@ export class AiAgentService {
 
       // Configure the AI stream with options for proper streaming
       // Use type assertion to bypass TypeScript errors for experimental features
+      // We need to ignore TypeScript errors for experimental parameters
+      // The correct parameter is tool_resources in the API but toolResources in the SDK
       // @ts-ignore - experimental parameters not in types yet
       return streamText({
         model: openai('gpt-4o-mini'), // Requires OPENAI_API_KEY in env
@@ -126,6 +138,8 @@ export class AiAgentService {
         tools: this.tools,
         maxSteps: 10,
         temperature: 0.7, // Add some variability to responses
+        // Tool choice parameter for automatic tool selection
+        toolChoice: 'auto',
       });
     } catch (err) {
       this.logger.error('AI agent streaming error', err);

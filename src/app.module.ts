@@ -11,6 +11,7 @@ import { CommonModule } from './common/common.module';
 import { User } from './vault/entities/user/user';
 import { Deposit } from './vault/entities/deposit/deposit';
 import { AiAgentModule } from './ai-agent/ai-agent.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { AiAgentModule } from './ai-agent/ai-agent.module';
     BlockchainModule,
     CommonModule,
     AiAgentModule,
+    DashboardModule,
   ],
 })
 export class AppModule {}

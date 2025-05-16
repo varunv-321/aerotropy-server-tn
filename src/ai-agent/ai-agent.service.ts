@@ -8,6 +8,7 @@ import { ViemWalletProvider } from '@coinbase/agentkit';
 import { baseSepolia, base } from 'viem/chains';
 import { createWalletClient, http } from 'viem';
 import { DashboardService } from '../dashboard/dashboard.service';
+import { PoolCacheService } from '../uniswap/pool-cache.service';
 import { serviceRegistry } from './tools/service-registry';
 
 @Injectable()
@@ -17,10 +18,16 @@ export class AiAgentService {
   private currentWalletAddress: string | null = null;
   private readonly logger = new Logger(AiAgentService.name);
 
-  constructor(private readonly dashboardService: DashboardService) {
-    // Register the dashboard service in the service registry for tools to access
+  constructor(
+    private readonly dashboardService: DashboardService,
+    private readonly poolCacheService: PoolCacheService,
+  ) {
+    // Register services in the service registry for tools to access
     serviceRegistry.registerService('dashboardService', this.dashboardService);
-    this.logger.log('Dashboard service registered in the service registry');
+    serviceRegistry.registerService('poolCacheService', this.poolCacheService);
+    this.logger.log(
+      'Dashboard and Pool Cache services registered in the service registry',
+    );
   }
 
   /**
@@ -77,6 +84,7 @@ export class AiAgentService {
       );
       const { walletTools } = await import('./tools/wallet.tools');
       const { dashboardTools } = await import('./tools/dashboard.tools');
+      const { poolCacheTools } = await import('./tools/pool-cache.tools');
 
       this.tools = {
         ...vercelTools,
@@ -84,9 +92,10 @@ export class AiAgentService {
         ...poolInvestmentTools,
         ...walletTools,
         ...dashboardTools,
+        ...poolCacheTools,
       };
       this.logger.log(
-        'Vercel AI tools + Uniswap tools + Pool Investment tools + Wallet tools + Dashboard tools initialized. Tool count: ' +
+        'Vercel AI tools + Uniswap tools + Pool Investment tools + Wallet tools + Dashboard tools + Pool Cache tools initialized. Tool count: ' +
           Object.keys(this.tools).length,
       );
     }

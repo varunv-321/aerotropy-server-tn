@@ -11,78 +11,6 @@ export class AiAgentController {
 
   constructor(private readonly aiAgentService: AiAgentService) {}
 
-  @Post('chat')
-  @ApiOperation({
-    summary: 'Chat with the onchain AI agent',
-    description: 'Send a prompt to the AI agent and get a response.',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'AI agent response',
-    schema: { example: { text: '...' } },
-  })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        messages: {
-          type: 'array',
-          description:
-            'Array of previous messages in the conversation for context',
-          items: {
-            type: 'object',
-            properties: {
-              role: {
-                type: 'string',
-                enum: ['user', 'assistant', 'system'],
-                description: 'Role of the message sender',
-              },
-              content: {
-                type: 'string',
-                description: 'Content of the message',
-              },
-            },
-          },
-        },
-        system: {
-          type: 'string',
-          description: 'Optional system prompt for LLM',
-          example: 'You are an onchain AI assistant.',
-        },
-        maxSteps: {
-          type: 'integer',
-          description: 'Optional max tool steps',
-          example: 10,
-        },
-        strategy: {
-          type: 'string',
-          description: 'Investment strategy preset (low, medium, high)',
-          enum: ['low', 'medium', 'high'],
-          example: 'low',
-        },
-      },
-      required: ['messages'],
-    },
-  })
-  async chat(
-    @Body()
-    body: {
-      messages: Message[];
-      system?: string;
-      maxSteps?: number;
-      strategy?: 'low' | 'medium' | 'high';
-    },
-  ) {
-    this.logger.log(`Received chat request: ${JSON.stringify(body)}`);
-    try {
-      const text = await this.aiAgentService.chat(body);
-      return { text };
-    } catch (err) {
-      this.logger.error('AI agent error', err);
-      throw err;
-    }
-  }
-
   @Post('chat/stream')
   @ApiOperation({
     summary: 'Chat with the onchain AI agent (streaming response)',
@@ -120,20 +48,9 @@ export class AiAgentController {
             },
           },
         },
-        system: {
+        walletAddress: {
           type: 'string',
-          description: 'Optional system prompt for the LLM.',
-        },
-        maxSteps: {
-          type: 'number',
-          description: 'Maximum number of tool steps to run.',
-          example: 10,
-        },
-        strategy: {
-          type: 'string',
-          description: 'Investment strategy preset (low, medium, high)',
-          enum: ['low', 'medium', 'high'],
-          example: 'low',
+          description: 'Wallet address of the user.',
         },
       },
       required: ['messages'],
@@ -143,9 +60,7 @@ export class AiAgentController {
     @Body()
     body: {
       messages: Message[];
-      system?: string;
-      maxSteps?: number;
-      strategy?: 'low' | 'medium' | 'high';
+      walletAddress: string;
     },
     @Res() res: Response,
   ) {

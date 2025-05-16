@@ -51,44 +51,6 @@ export class AiAgentService {
   }
 
   /**
-   * Generate a response using OpenAI + AgentKit tools
-   * @param messages - Array of user and assistant messages for conversation context
-   * @param system - (Optional) System prompt for LLM
-   * @param maxSteps - (Optional) Max tool steps
-   * @returns LLM response text
-   */
-  async chat({
-    messages,
-    system,
-    maxSteps = 10,
-    strategy,
-  }: {
-    messages: Message[];
-    system?: string;
-    maxSteps?: number;
-    strategy?: StrategyKey;
-  }): Promise<string> {
-    await this.ensureInitialized();
-    // If a strategy is provided, override system prompt
-    let systemPrompt = system;
-    if (!systemPrompt && strategy && STRATEGY_PRESETS[strategy]) {
-      systemPrompt = STRATEGY_PRESETS[strategy].systemPrompt;
-    }
-    if (!systemPrompt) {
-      systemPrompt =
-        'You are an onchain AI assistant with access to a wallet. You can help users invest in different risk pools (low, medium, high) using various tokens (USDT, USDC, DAI, ETH). When a user asks to invest a specific amount in a pool, prepare a transaction for them.';
-    }
-    const { text } = await generateText({
-      model: openai('gpt-4o-mini'), // Requires OPENAI_API_KEY in env
-      system: systemPrompt,
-      messages,
-      tools: this.tools,
-      maxSteps,
-    });
-    return text;
-  }
-
-  /**
    * Generate a streaming response using OpenAI + AgentKit tools
    * @param messages - Array of user and assistant messages for conversation context
    * @param system - (Optional) System prompt for LLM
@@ -97,34 +59,42 @@ export class AiAgentService {
    */
   async chatStream({
     messages,
-    system,
-    maxSteps = 10,
+    walletAddress,
     strategy,
   }: {
     messages: Message[];
-    system?: string;
-    maxSteps?: number;
+    walletAddress: string;
     strategy?: StrategyKey;
   }) {
-    await this.ensureInitialized();
+    try {
+      await this.ensureInitialized();
 
-    // If a strategy is provided, override system prompt
-    let systemPrompt = system;
-    if (!systemPrompt && strategy && STRATEGY_PRESETS[strategy]) {
-      systemPrompt = STRATEGY_PRESETS[strategy].systemPrompt;
-    }
-    if (!systemPrompt) {
-      systemPrompt =
-        'You are an onchain AI assistant with access to a wallet. You can help users invest in different risk pools (low, medium, high) using various tokens (USDT, USDC, DAI, ETH). When a user asks to invest a specific amount in a pool, prepare a transaction for them.';
-    }
+      // If a strategy is provided, override system prompt
+      let systemPrompt = '';
+      if (!systemPrompt && strategy && STRATEGY_PRESETS[strategy]) {
+        systemPrompt = STRATEGY_PRESETS[strategy].systemPrompt;
+      }
+      if (!systemPrompt) {
+        systemPrompt =
+          'You are an onchain AI assistant with access to a wallet: ' +
+          walletAddress +
+          '. You can help users invest in different risk pools (low, medium, high) using various tokens (USDT, USDC, DAI, ETH). When a user asks to invest a specific amount in a pool, prepare a transaction for them.';
+      }
 
-    // Return a streamable result that can be piped to the response
-    return streamText({
-      model: openai('gpt-4o-mini'), // Requires OPENAI_API_KEY in env
-      system: systemPrompt,
-      messages,
-      tools: this.tools,
-      maxSteps,
-    });
+      this.logger.log('System prompt: ' + systemPrompt);
+      this.logger.log('Messages: ' + JSON.stringify(messages));
+
+      // Return a streamable result that can be piped to the response
+      return streamText({
+        model: openai('gpt-4o-mini'), // Requires OPENAI_API_KEY in env
+        system: systemPrompt,
+        messages,
+        tools: this.tools,
+        maxSteps: 10,
+      });
+    } catch (err) {
+      this.logger.error('AI agent streaming error', err);
+      throw err;
+    }
   }
 }

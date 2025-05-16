@@ -90,20 +90,72 @@ export class PoolCacheService implements OnModuleInit {
       this.logger.log(
         `Querying Uniswap v3 pools for ${strategy} risk strategy`,
       );
-      const v3Pools = await this.uniswapService.getBestPoolsWithScore(
-        this.network,
-        opts,
-        3, // Explicitly specify v3
-      );
+
+      // Add timeout mechanism to prevent hanging
+      let v3Pools: PoolWithAPR[] = [];
+      try {
+        // Create a promise that rejects after 15 seconds
+        const timeoutPromise = new Promise<PoolWithAPR[]>((_, reject) => {
+          setTimeout(
+            () =>
+              reject(new Error('Uniswap v3 query timed out after 15 seconds')),
+            15000,
+          );
+        });
+
+        // Race the actual query against the timeout
+        v3Pools = await Promise.race([
+          this.uniswapService.getBestPoolsWithScore(
+            this.network,
+            opts,
+            3, // Explicitly specify v3
+          ),
+          timeoutPromise,
+        ]);
+
+        this.logger.log(
+          `Successfully retrieved ${v3Pools.length} v3 pools for ${strategy} risk strategy`,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Failed to fetch v3 pools for ${strategy} risk strategy: ${error.message}. Continuing with empty result.`,
+        );
+        // Continue with empty array so we can still try v4 pools
+      }
 
       this.logger.log(
         `Querying Uniswap v4 pools for ${strategy} risk strategy`,
       );
-      const v4Pools = await this.uniswapService.getBestPoolsWithScore(
-        this.network,
-        opts,
-        4, // Explicitly specify v4
-      );
+
+      let v4Pools: PoolWithAPR[] = [];
+      try {
+        // Create a promise that rejects after 15 seconds
+        const timeoutPromise = new Promise<PoolWithAPR[]>((_, reject) => {
+          setTimeout(
+            () =>
+              reject(new Error('Uniswap v4 query timed out after 15 seconds')),
+            15000,
+          );
+        });
+
+        // Race the actual query against the timeout
+        v4Pools = await Promise.race([
+          this.uniswapService.getBestPoolsWithScore(
+            this.network,
+            opts,
+            4, // Explicitly specify v4
+          ),
+          timeoutPromise,
+        ]);
+
+        this.logger.log(
+          `Successfully retrieved ${v4Pools.length} v4 pools for ${strategy} risk strategy`,
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Failed to fetch v4 pools for ${strategy} risk strategy: ${error.message}. Continuing with empty result.`,
+        );
+      }
 
       // Combine results from both versions
       const pools = [...v3Pools, ...v4Pools];
@@ -216,11 +268,13 @@ export class PoolCacheService implements OnModuleInit {
    */
   async getPoolSummary(topN: number = 5) {
     try {
-      this.logger.log(`Generating comprehensive pool summary with top ${topN} pools per strategy`);
-      
+      this.logger.log(
+        `Generating comprehensive pool summary with top ${topN} pools per strategy`,
+      );
+
       // Get all the strategy APRs
       const aprs = await this.getAllStrategyAprs();
-      
+
       // Helper function to create strategy description
       const getStrategyDescription = (strategy: StrategyKey): string => {
         switch (strategy) {
@@ -239,11 +293,11 @@ export class PoolCacheService implements OnModuleInit {
         this.getCachedPoolsByStrategy('medium'),
         this.getCachedPoolsByStrategy('high'),
       ]);
-      
+
       // Helper function to get top N pools for a strategy sorted by APR
       const getTopPools = (pools: PoolWithAPR[], count: number) => {
         return pools
-          .filter(pool => pool.apr !== null)
+          .filter((pool) => pool.apr !== null)
           .sort((a, b) => (b.apr || 0) - (a.apr || 0))
           .slice(0, count);
       };
@@ -280,7 +334,10 @@ export class PoolCacheService implements OnModuleInit {
         lastUpdated: new Date().toISOString(),
       };
     } catch (error) {
-      this.logger.error(`Error generating pool summary: ${error.message}`, error.stack);
+      this.logger.error(
+        `Error generating pool summary: ${error.message}`,
+        error.stack,
+      );
       throw error;
     }
   }

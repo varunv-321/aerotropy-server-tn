@@ -51,7 +51,8 @@ export class PoolCacheController {
   // Strategy descriptions for the summary endpoint
   private readonly strategyDescriptions = {
     low: 'Conservative strategy focusing on established pools with proven stability, high TVL, and consistent fees. Prioritizes lower volatility over APR.',
-    medium: 'Balanced strategy that seeks moderate risk and return. Targets pools with good volume and reasonable APR while maintaining acceptable volatility.',
+    medium:
+      'Balanced strategy that seeks moderate risk and return. Targets pools with good volume and reasonable APR while maintaining acceptable volatility.',
     high: 'Aggressive strategy that targets maximum APR and accepts higher volatility. Focuses on newer or more volatile pools with potential for higher returns.',
   };
 
@@ -128,30 +129,36 @@ export class PoolCacheController {
   @Get('summary')
   @ApiOperation({
     summary: 'Get comprehensive pool summary',
-    description: 'Returns detailed information about all strategies and their top pools in a single request.',
+    description:
+      'Returns detailed information about all strategies and their top pools in a single request.',
   })
   @ApiResponse({
     status: 200,
     description: 'Comprehensive pool summary with details for all strategies.',
   })
-  async getComprehensivePoolSummary(@Query('topN') topN: number = 5): Promise<PoolSummary> {
+  async getComprehensivePoolSummary(
+    @Query('topN') topN: number = 5,
+  ): Promise<PoolSummary> {
     // Get the APRs for all strategies
     const aprs = await this.poolCacheService.getAllStrategyAprs();
-    
+
     // Get the cached pools for each strategy
     const [lowPools, mediumPools, highPools] = await Promise.all([
       this.poolCacheService.getCachedPoolsByStrategy('low'),
       this.poolCacheService.getCachedPoolsByStrategy('medium'),
       this.poolCacheService.getCachedPoolsByStrategy('high'),
     ]);
-    
+
     // Get the top N pools for each strategy sorted by APR
-    const getTopPools = (pools: PoolWithAPR[], count: number): PoolDetails[] => {
+    const getTopPools = (
+      pools: PoolWithAPR[],
+      count: number,
+    ): PoolDetails[] => {
       return pools
-        .filter(pool => pool.apr !== null)
+        .filter((pool) => pool.apr !== null)
         .sort((a, b) => (b.apr || 0) - (a.apr || 0))
         .slice(0, count)
-        .map(pool => ({
+        .map((pool) => ({
           id: pool.id,
           token0: {
             symbol: pool.token0.symbol,
@@ -169,7 +176,9 @@ export class PoolCacheController {
           volatility: pool.aprStdDev !== null ? pool.aprStdDev : undefined,
           sharpeRatio: pool.sharpeRatio !== null ? pool.sharpeRatio : undefined,
           // Add volume metrics if available (using poolDayData if needed)
-          volume7d: pool.averageVolume7d ? pool.averageVolume7d.toString() : undefined,
+          volume7d: pool.averageVolume7d
+            ? pool.averageVolume7d.toString()
+            : undefined,
         }));
     };
 
@@ -204,7 +213,7 @@ export class PoolCacheController {
       timestamp: Date.now(),
       lastUpdated: new Date().toISOString(),
     };
-    
+
     return summary;
   }
 

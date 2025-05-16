@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ethers } from 'ethers';
 import { POOL_ABI } from '../../contracts/abi/POOL_ABI';
+import { tool } from 'ai';
 
 // RPC URL for Base Sepolia testnet
 const RPC_URL = process.env.BASE_SEPOLIA_RPC || 'https://sepolia.base.org';

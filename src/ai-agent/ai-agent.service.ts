@@ -4,47 +4,80 @@ import { AgentKit } from '@coinbase/agentkit';
 import { streamText, Message } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { STRATEGY_PRESETS, StrategyKey } from '../uniswap/strategy-presets';
+import { ViemWalletProvider } from '@coinbase/agentkit';
+import { baseSepolia, base } from 'viem/chains';
+import { createWalletClient, http } from 'viem';
 
 @Injectable()
 export class AiAgentService {
   private agentKit: AgentKit | null = null;
   private tools: any = null;
+  private currentWalletAddress: string | null = null;
   private readonly logger = new Logger(AiAgentService.name);
 
   /**
-   * Ensure AgentKit and tools are initialized (cached after first use)
+   * Ensure AgentKit and tools are initialized with the correct wallet address
+   * This will reinitialize AgentKit if a different wallet address is provided
+   * @param walletAddress The wallet address to use for the AI agent
    */
-  private async ensureInitialized() {
-    if (!this.agentKit) {
-      this.agentKit = await AgentKit.from({
-        cdpApiKeyName: process.env.CDP_API_KEY_NAME!,
-        cdpApiKeyPrivateKey: process.env.CDP_API_KEY_PRIVATE_KEY!,
+  private async ensureInitialized(walletAddress: string) {
+    // Format wallet address to ensure it has the 0x prefix
+    const formattedAddress = walletAddress.startsWith('0x')
+      ? walletAddress
+      : `0x${walletAddress}`;
+
+    // Check if we need to reinitialize the AgentKit with a new wallet address
+    const needsReinitialization =
+      !this.agentKit || this.currentWalletAddress !== formattedAddress;
+
+    if (needsReinitialization) {
+      this.logger.log(
+        `Initializing AgentKit with wallet address: ${formattedAddress}`,
+      );
+
+      // Create a wallet client with the provided wallet address
+      const client = createWalletClient({
+        account: formattedAddress as `0x${string}`,
+        chain: baseSepolia, // Using Base Sepolia testnet
+        transport: http(
+          process.env.BASE_SEPOLIA_RPC || 'https://sepolia.base.org',
+        ),
       });
-      this.logger.log('AgentKit initialized');
+
+      // Create a new AgentKit instance with the wallet provider
+      this.agentKit = await AgentKit.from({
+        walletProvider: new ViemWalletProvider(client),
+      });
+
+      // Store the current wallet address for future reference
+      this.currentWalletAddress = formattedAddress;
+
+      // Need to reinitialize tools when AgentKit changes
+      this.tools = null;
+
+      this.logger.log('AgentKit initialized with new wallet address');
     }
-    if (!this.tools) {
+    if (!this.tools && this.agentKit) {
+      // AgentKit must be initialized before getting tools
       const vercelTools = await getVercelAITools(this.agentKit);
       const { uniswapTools } = await import('./tools/uniswap.tools');
       const { poolInvestmentTools } = await import(
         './tools/pool-investment.tools'
       );
-
-      // Merge tools as an object (ToolSet), per Vercel AI SDK docs
-      const uniswapToolsObject = Object.fromEntries(
-        uniswapTools.map((tool) => [tool.name, tool]),
-      );
+      const { walletTools } = await import('./tools/wallet.tools');
 
       const poolInvestmentToolsObject = Object.fromEntries(
-        poolInvestmentTools.map((tool) => [tool.name, tool]),
+        poolInvestmentTools.map((tool: any) => [tool.name, tool]),
       );
 
       this.tools = {
         ...vercelTools,
-        ...uniswapToolsObject,
+        ...uniswapTools,
         ...poolInvestmentToolsObject,
+        ...walletTools,
       };
       this.logger.log(
-        'Vercel AI tools + Uniswap tools + Pool Investment tools initialized. Tool count: ' +
+        'Vercel AI tools + Uniswap tools + Pool Investment tools + Wallet tools initialized. Tool count: ' +
           Object.keys(this.tools).length,
       );
     }
@@ -65,7 +98,7 @@ export class AiAgentService {
     walletAddress: string;
   }) {
     try {
-      await this.ensureInitialized();
+      await this.ensureInitialized(walletAddress);
 
       // Determine strategy from user messages
       const strategy = this.determineStrategyFromMessages(messages);
@@ -78,9 +111,7 @@ export class AiAgentService {
       }
       if (!systemPrompt) {
         systemPrompt =
-          'You are an onchain AI assistant with access to a wallet: ' +
-          walletAddress +
-          '. You can help users invest in different risk pools (low, medium, high) using various tokens (USDT, USDC, DAI, ETH). When a user asks to invest a specific amount in a pool, prepare a transaction for them.';
+          'You are an onchain AI assistant with access to a wallet. You can help users invest in different risk pools (low, medium, high) using various tokens (USDT, USDC, DAI, ETH). When a user asks to invest a specific amount in a pool, prepare a transaction for them.';
       }
 
       this.logger.log('System prompt: ' + systemPrompt);

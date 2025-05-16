@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { getVercelAITools } from '@coinbase/agentkit-vercel-ai-sdk';
 import { AgentKit } from '@coinbase/agentkit';
-import { generateText, streamText } from 'ai';
+import { generateText, streamText, Message } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { STRATEGY_PRESETS, StrategyKey } from '../uniswap/strategy-presets';
 
@@ -52,18 +52,18 @@ export class AiAgentService {
 
   /**
    * Generate a response using OpenAI + AgentKit tools
-   * @param prompt - User prompt for the agent
+   * @param messages - Array of user and assistant messages for conversation context
    * @param system - (Optional) System prompt for LLM
    * @param maxSteps - (Optional) Max tool steps
    * @returns LLM response text
    */
   async chat({
-    prompt,
+    messages,
     system,
     maxSteps = 10,
     strategy,
   }: {
-    prompt: string;
+    messages: Message[];
     system?: string;
     maxSteps?: number;
     strategy?: StrategyKey;
@@ -81,7 +81,7 @@ export class AiAgentService {
     const { text } = await generateText({
       model: openai('gpt-4o-mini'), // Requires OPENAI_API_KEY in env
       system: systemPrompt,
-      prompt,
+      messages,
       tools: this.tools,
       maxSteps,
     });
@@ -90,18 +90,18 @@ export class AiAgentService {
 
   /**
    * Generate a streaming response using OpenAI + AgentKit tools
-   * @param prompt - User prompt for the agent
+   * @param messages - Array of user and assistant messages for conversation context
    * @param system - (Optional) System prompt for LLM
    * @param maxSteps - (Optional) Max tool steps
    * @returns Streamable response that can be piped to HTTP response
    */
   async chatStream({
-    prompt,
+    messages,
     system,
     maxSteps = 10,
     strategy,
   }: {
-    prompt: string;
+    messages: Message[];
     system?: string;
     maxSteps?: number;
     strategy?: StrategyKey;
@@ -122,7 +122,7 @@ export class AiAgentService {
     return streamText({
       model: openai('gpt-4o-mini'), // Requires OPENAI_API_KEY in env
       system: systemPrompt,
-      prompt,
+      messages,
       tools: this.tools,
       maxSteps,
     });

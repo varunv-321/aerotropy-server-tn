@@ -2,6 +2,7 @@ import { Controller, Post, Body, Logger, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { AiAgentService } from './ai-agent.service';
 import { Response } from 'express';
+import { Message } from 'ai';
 
 @ApiTags('AI Agent')
 @Controller('ai-agent')
@@ -24,10 +25,24 @@ export class AiAgentController {
     schema: {
       type: 'object',
       properties: {
-        prompt: {
-          type: 'string',
-          description: 'Prompt for the AI agent',
-          example: 'Print wallet details',
+        messages: {
+          type: 'array',
+          description:
+            'Array of previous messages in the conversation for context',
+          items: {
+            type: 'object',
+            properties: {
+              role: {
+                type: 'string',
+                enum: ['user', 'assistant', 'system'],
+                description: 'Role of the message sender',
+              },
+              content: {
+                type: 'string',
+                description: 'Content of the message',
+              },
+            },
+          },
         },
         system: {
           type: 'string',
@@ -46,13 +61,13 @@ export class AiAgentController {
           example: 'low',
         },
       },
-      required: ['prompt'],
+      required: ['messages'],
     },
   })
   async chat(
     @Body()
     body: {
-      prompt: string;
+      messages: Message[];
       system?: string;
       maxSteps?: number;
       strategy?: 'low' | 'medium' | 'high';
@@ -86,10 +101,24 @@ export class AiAgentController {
     schema: {
       type: 'object',
       properties: {
-        prompt: {
-          type: 'string',
-          description: 'User prompt for the AI agent.',
-          example: 'Show me high APR pools on Base.',
+        messages: {
+          type: 'array',
+          description:
+            'Array of previous messages in the conversation for context',
+          items: {
+            type: 'object',
+            properties: {
+              role: {
+                type: 'string',
+                enum: ['user', 'assistant', 'system'],
+                description: 'Role of the message sender',
+              },
+              content: {
+                type: 'string',
+                description: 'Content of the message',
+              },
+            },
+          },
         },
         system: {
           type: 'string',
@@ -107,13 +136,13 @@ export class AiAgentController {
           example: 'low',
         },
       },
-      required: ['prompt'],
+      required: ['messages'],
     },
   })
   async chatStream(
     @Body()
     body: {
-      prompt: string;
+      messages: Message[];
       system?: string;
       maxSteps?: number;
       strategy?: 'low' | 'medium' | 'high';

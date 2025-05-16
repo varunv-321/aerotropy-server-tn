@@ -45,7 +45,10 @@ export class AiAgentService {
 
       // Create a wallet client with the provided wallet address
       const client = createWalletClient({
-        account: formattedAddress as `0x${string}`,
+        account: {
+          address: formattedAddress as `0x${string}`,
+          type: 'json-rpc',
+        },
         chain: baseSepolia, // Using Base Sepolia testnet
         transport: http(
           process.env.BASE_SEPOLIA_RPC || 'https://sepolia.base.org',
@@ -54,7 +57,7 @@ export class AiAgentService {
 
       // Create a new AgentKit instance with the wallet provider
       this.agentKit = await AgentKit.from({
-        walletProvider: new ViemWalletProvider(client),
+        walletProvider: new ViemWalletProvider(client as any),
       });
 
       // Store the current wallet address for future reference
@@ -120,6 +123,7 @@ export class AiAgentService {
           'You are an onchain AI assistant with access to a wallet. You can help users invest in different risk pools (low, medium, high) using various tokens (USDT, USDC, DAI, ETH). ' +
           'IMPORTANT INSTRUCTION: When a user asks to invest a specific amount in a pool, ALWAYS use the parseInvestmentRequest or prepareInvestmentTransaction tools from the pool investment tools DIRECTLY. ' +
           'DO NOT use Uniswap tools like getUniswapBestPools or getUniswapPoolsByStrategy before preparing an investment transaction. ' +
+          'DO NOT use the connectWallet tool for pool investments - the pool investment tools do not require wallet connection and will work without it. ' +
           'The pool investment tools already handle finding the appropriate pool based on the risk level.';
       }
 

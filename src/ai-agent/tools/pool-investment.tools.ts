@@ -87,18 +87,8 @@ export const poolInvestmentTools = {
         };
       }
 
-      // Check wallet balance if address is provided
-      if (walletAddress) {
-        const balanceCheck = await checkWalletBalance(walletAddress);
-
-        if (!balanceCheck.success) {
-          return {
-            success: false,
-            error: `Insufficient balance for gas fees. Your wallet address is ${walletAddress}, but it currently has a native balance of ${balanceCheck.formattedBalance || '0'} ETH. You need at least ${balanceCheck.minRequired || '0.001'} ETH for gas fees.`,
-            walletBalance: balanceCheck,
-          };
-        }
-      }
+      // We'll proceed regardless of wallet connection status
+      // This matches how the Uniswap tools work
 
       const transaction = prepareInvestmentTransaction(
         result.poolRisk,
@@ -106,13 +96,19 @@ export const poolInvestmentTools = {
         result.amount,
       );
 
+      // Always return the transaction data without requiring wallet connection
       return {
         success: true,
-        params: result,
+        params: {
+          poolRisk: result.poolRisk,
+          tokenSymbol: result.tokenSymbol,
+          amount: result.amount,
+        },
         transaction,
-        walletBalance: walletAddress
-          ? await checkWalletBalance(walletAddress)
-          : undefined,
+        // Only include wallet balance info if explicitly requested and successful
+        ...(walletAddress
+          ? { walletBalance: await checkWalletBalance(walletAddress) }
+          : {}),
       };
     },
   }),
@@ -123,7 +119,7 @@ export const poolInvestmentTools = {
     parameters: z.object({
       poolRisk: z
         .enum(['low', 'medium', 'high'])
-        .describe('Risk level of the pool to invest in'),
+        .describe('Risk level of the pool (low, medium, high)'),
       tokenSymbol: z
         .enum(['usdt', 'usdc', 'dai', 'eth'])
         .describe('Token symbol to invest with'),
@@ -134,18 +130,8 @@ export const poolInvestmentTools = {
         .describe('Optional wallet address to check balance'),
     }),
     async execute({ poolRisk, tokenSymbol, amount, walletAddress }) {
-      // Check wallet balance if address is provided
-      if (walletAddress) {
-        const balanceCheck = await checkWalletBalance(walletAddress);
-
-        if (!balanceCheck.success) {
-          return {
-            success: false,
-            error: `Insufficient balance for gas fees. Your wallet address is ${walletAddress}, but it currently has a native balance of ${balanceCheck.formattedBalance || '0'} ETH. You need at least ${balanceCheck.minRequired || '0.001'} ETH for gas fees.`,
-            walletBalance: balanceCheck,
-          };
-        }
-      }
+      // We'll prepare the transaction regardless of wallet connection
+      // This matches how the Uniswap tools work
 
       const transaction = prepareInvestmentTransaction(
         poolRisk,

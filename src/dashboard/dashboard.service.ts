@@ -182,13 +182,34 @@ export class DashboardService {
         // Map pool names to risk strategies
         const riskStrategy = this.mapPoolToRiskStrategy(pool.name);
         if (riskStrategy) {
-          // Get average APR by strategy
-          const aprData =
-            await this.poolCacheService.getAverageAprByStrategy(riskStrategy);
-          apr = aprData;
-          this.logger.log(
-            `Got APR for ${pool.name} (${riskStrategy} risk): ${apr}%`,
-          );
+          // Check for demo mode for consistent APR values
+          const isDemoMode = process.env.DEMO_MODE === 'true';
+
+          if (isDemoMode) {
+            // Use fixed APR values in demo mode for better visualization
+            switch (riskStrategy) {
+              case 'low':
+                apr = 18.75;
+                break;
+              case 'medium':
+                apr = 35.42;
+                break;
+              case 'high':
+                apr = 72.89;
+                break;
+            }
+            this.logger.log(
+              `Using demo mode APR for ${pool.name} (${riskStrategy} risk): ${apr}%`,
+            );
+          } else {
+            // Normal mode: Get average APR by strategy
+            const aprData =
+              await this.poolCacheService.getAverageAprByStrategy(riskStrategy);
+            apr = aprData;
+            this.logger.log(
+              `Got APR for ${pool.name} (${riskStrategy} risk): ${apr}%`,
+            );
+          }
         }
       } catch (aprError) {
         this.logger.warn(
@@ -409,13 +430,34 @@ export class DashboardService {
         // Map pool names to risk strategies
         const riskStrategy = this.mapPoolToRiskStrategy(pool.name);
         if (riskStrategy) {
-          // Get average APR by strategy
-          const aprData =
-            await this.poolCacheService.getAverageAprByStrategy(riskStrategy);
-          apr = aprData;
-          this.logger.log(
-            `Got APR for ${pool.name} (${riskStrategy} risk): ${apr}%`,
-          );
+          // Check for demo mode for consistent APR values
+          const isDemoMode = process.env.DEMO_MODE === 'true';
+
+          if (isDemoMode) {
+            // Use fixed APR values in demo mode for better visualization
+            switch (riskStrategy) {
+              case 'low':
+                apr = 18.75;
+                break;
+              case 'medium':
+                apr = 35.42;
+                break;
+              case 'high':
+                apr = 72.89;
+                break;
+            }
+            this.logger.log(
+              `Using demo mode APR for ${pool.name} (${riskStrategy} risk): ${apr}%`,
+            );
+          } else {
+            // Normal mode: Get average APR by strategy
+            const aprData =
+              await this.poolCacheService.getAverageAprByStrategy(riskStrategy);
+            apr = aprData;
+            this.logger.log(
+              `Got APR for ${pool.name} (${riskStrategy} risk): ${apr}%`,
+            );
+          }
         }
       } catch (aprError) {
         this.logger.warn(

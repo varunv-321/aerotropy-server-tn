@@ -253,7 +253,20 @@ export class PoolCacheService implements OnModuleInit {
   async getAllStrategyAprs(): Promise<Record<StrategyKey, number>> {
     const result: Partial<Record<StrategyKey, number>> = {};
 
-    // Use Promise.all for concurrent execution
+    // Check for demo mode environment variable
+    const isDemoMode = process.env.DEMO_MODE === 'true';
+
+    if (isDemoMode) {
+      // In demo mode, return fixed, more visually appealing values
+      this.logger.log('Using demo mode APR values for better visualization');
+      return {
+        low: 18.75, // Conservative but still attractive
+        medium: 35.42, // Good middle round
+        high: 72.89, // Exciting high-risk returns
+      };
+    }
+
+    // Normal mode: Use Promise.all for concurrent execution
     await Promise.all(
       this.strategies.map(async (strategy) => {
         result[strategy] = await this.getAverageAprByStrategy(strategy);
@@ -267,6 +280,76 @@ export class PoolCacheService implements OnModuleInit {
    * Get a comprehensive summary of all pool strategies
    * This includes strategy descriptions, average APRs, and top pools for each strategy
    */
+  /**
+   * Get the top N pools for a specific strategy, sorted by APR
+   * In demo mode, will enhance the APR values to show more realistic ranges
+   */
+  async getTopPoolsByStrategy(
+    strategy: StrategyKey,
+    count: number = 5,
+  ): Promise<PoolWithAPR[]> {
+    // Get all pools for this strategy
+    const allPools = await this.getCachedPoolsByStrategy(strategy);
+
+    // Check for demo mode environment variable
+    const isDemoMode = process.env.DEMO_MODE === 'true';
+
+    if (isDemoMode) {
+      this.logger.log(`Using demo mode APR values for ${strategy} risk pools`);
+
+      // Create a copy of the pools to modify
+      const enhancedPools = [...allPools];
+
+      // Set realistic APR ranges based on strategy
+      let minApr = 0;
+      let maxApr = 0;
+
+      switch (strategy) {
+        case 'low':
+          minApr = 15;
+          maxApr = 25;
+          break;
+        case 'medium':
+          minApr = 25;
+          maxApr = 50;
+          break;
+        case 'high':
+          minApr = 50;
+          maxApr = 120;
+          break;
+      }
+
+      // Assign varied APR values within the appropriate range to each pool
+      enhancedPools.forEach((pool, index) => {
+        // Create a varied distribution of APRs within the range
+        // First pools get higher APRs to ensure top pools are the most attractive
+        const position = index / (enhancedPools.length || 1); // 0 to 1 position
+        const aprSpread = maxApr - minApr;
+        // Exponential decay ensures first pools get higher APRs
+        pool.apr = maxApr - aprSpread * Math.pow(position, 0.7);
+
+        // Add some slight randomness for more realistic values
+        pool.apr =
+          Math.round((pool.apr + (Math.random() * 5 - 2.5)) * 100) / 100;
+
+        // Ensure APR stays within the range
+        pool.apr = Math.max(minApr, Math.min(maxApr, pool.apr));
+      });
+
+      // Filter out nulls and sort by APR (highest first)
+      return enhancedPools
+        .filter((pool) => pool.apr !== null)
+        .sort((a, b) => (b.apr || 0) - (a.apr || 0))
+        .slice(0, count);
+    }
+
+    // Normal mode: Filter out nulls and sort by APR (highest first)
+    return allPools
+      .filter((pool) => pool.apr !== null)
+      .sort((a, b) => (b.apr || 0) - (a.apr || 0))
+      .slice(0, count);
+  }
+
   async getPoolSummary(topN: number = 5) {
     try {
       this.logger.log(
@@ -297,6 +380,20 @@ export class PoolCacheService implements OnModuleInit {
 
       // Helper function to get top N pools for a strategy sorted by APR
       const getTopPools = (pools: PoolWithAPR[], count: number) => {
+        // Check for demo mode environment variable
+        const isDemoMode = process.env.DEMO_MODE === 'true';
+
+        if (isDemoMode) {
+          // Use the same logic as getTopPoolsByStrategy for consistent APR values
+          const strategy =
+            pools === lowPools
+              ? 'low'
+              : pools === mediumPools
+                ? 'medium'
+                : 'high';
+          return this.enhancePoolApr(pools, count, strategy);
+        }
+
         return pools
           .filter((pool) => pool.apr !== null)
           .sort((a, b) => (b.apr || 0) - (a.apr || 0))
@@ -341,5 +438,58 @@ export class PoolCacheService implements OnModuleInit {
       );
       throw error;
     }
+  }
+
+  /**
+   * Helper method to enhance pool APR values for demo mode
+   * Private method used by getTopPoolsByStrategy and getPoolSummary
+   */
+  private enhancePoolApr(
+    pools: PoolWithAPR[],
+    count: number,
+    strategy: StrategyKey,
+  ): PoolWithAPR[] {
+    // Create a copy of the pools to modify
+    const enhancedPools = [...pools];
+
+    // Set realistic APR ranges based on strategy
+    let minApr = 0;
+    let maxApr = 0;
+
+    switch (strategy) {
+      case 'low':
+        minApr = 15;
+        maxApr = 25;
+        break;
+      case 'medium':
+        minApr = 25;
+        maxApr = 50;
+        break;
+      case 'high':
+        minApr = 50;
+        maxApr = 120;
+        break;
+    }
+
+    // Assign varied APR values within the appropriate range to each pool
+    enhancedPools.forEach((pool, index) => {
+      // Create a varied distribution of APRs within the range
+      const position = index / (enhancedPools.length || 1); // 0 to 1 position
+      const aprSpread = maxApr - minApr;
+      // Exponential decay ensures first pools get higher APRs
+      pool.apr = maxApr - aprSpread * Math.pow(position, 0.7);
+
+      // Add some slight randomness for more realistic values
+      pool.apr = Math.round((pool.apr + (Math.random() * 5 - 2.5)) * 100) / 100;
+
+      // Ensure APR stays within the range
+      pool.apr = Math.max(minApr, Math.min(maxApr, pool.apr));
+    });
+
+    // Filter out nulls and sort by APR (highest first)
+    return enhancedPools
+      .filter((pool) => pool.apr !== null)
+      .sort((a, b) => (b.apr || 0) - (a.apr || 0))
+      .slice(0, count);
   }
 }

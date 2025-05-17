@@ -5,7 +5,7 @@ import { streamText, Message } from 'ai';
 import { openai } from '@ai-sdk/openai';
 import { STRATEGY_PRESETS, StrategyKey } from '../uniswap/strategy-presets';
 import { ViemWalletProvider } from '@coinbase/agentkit';
-import { baseSepolia, base } from 'viem/chains';
+import { baseSepolia } from 'viem/chains';
 import { createWalletClient, http } from 'viem';
 import { DashboardService } from '../dashboard/dashboard.service';
 import { PoolCacheService } from '../uniswap/pool-cache.service';
@@ -85,6 +85,12 @@ export class AiAgentService {
       const { walletTools } = await import('./tools/wallet.tools');
       const { dashboardTools } = await import('./tools/dashboard.tools');
       const { poolCacheTools } = await import('./tools/pool-cache.tools');
+
+      // Store the wallet address in the service registry so tools can access it
+      serviceRegistry.registerService('currentWalletAddress', formattedAddress);
+      this.logger.log(
+        `Registered wallet address in service registry: ${formattedAddress}`,
+      );
 
       // Put pool investment tools first to ensure they're prioritized
       this.tools = {

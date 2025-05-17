@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ethers } from 'ethers';
 import { POOL_ABI } from '../../contracts/abi/POOL_ABI';
 import { tool } from 'ai';
+import { serviceRegistry } from './service-registry';
 
 // RPC URL for Base Sepolia testnet
 const RPC_URL = process.env.BASE_SEPOLIA_RPC || 'https://sepolia.base.org';
@@ -94,6 +95,7 @@ export const poolInvestmentTools = {
         result.poolRisk,
         result.tokenSymbol,
         result.amount,
+        walletAddress, // Pass the walletAddress to the prepareInvestmentTransaction function
       );
 
       // Always return the transaction data without requiring wallet connection
@@ -137,6 +139,7 @@ export const poolInvestmentTools = {
         poolRisk,
         tokenSymbol,
         amount,
+        walletAddress, // Pass the walletAddress to the prepareInvestmentTransaction function
       );
 
       return {
@@ -173,8 +176,17 @@ function prepareInvestmentTransaction(
   poolRisk: 'low' | 'medium' | 'high',
   tokenSymbol: 'usdt' | 'usdc' | 'dai' | 'eth',
   amount: string,
+  walletAddress?: string,
 ): TransactionData {
   try {
+    // Try to get wallet address from service registry if not provided directly
+    const registryWalletAddress = serviceRegistry.getService(
+      'currentWalletAddress',
+    );
+    const effectiveWalletAddress = walletAddress || registryWalletAddress;
+    console.log('walletAddress from param:', walletAddress);
+    console.log('walletAddress from registry:', registryWalletAddress);
+    console.log('effective walletAddress:', effectiveWalletAddress);
     // Get pool address based on risk level
     const poolAddress = POOL_ADDRESSES[poolRisk];
     if (!poolAddress) {
@@ -186,8 +198,6 @@ function prepareInvestmentTransaction(
     if (!token) {
       throw new Error(`Token ${tokenSymbol} not supported`);
     }
-    const tokenAddress = token.address;
-
     // Create contract interface
     const poolInterface = new ethers.Interface(POOL_ABI);
 
@@ -218,10 +228,14 @@ function prepareInvestmentTransaction(
     } else {
       // For ERC20 tokens, we need to approve the token first (this would be a separate transaction)
       // Then call the deposit function
+      // If effective wallet address is available, use it as the receiver, otherwise use 0x0 (sender)
+      const receiver = effectiveWalletAddress
+        ? effectiveWalletAddress
+        : '0x0000000000000000000000000000000000000000';
       const data = poolInterface.encodeFunctionData('deposit', [
         tokenId,
         amountInWei,
-        '0x0000000000000000000000000000000000000000', // Receiver (0x0 means sender)
+        receiver, // Use the wallet address as the receiver if provided
       ]);
 
       // Note: The frontend would need to handle the ERC20 approval transaction separately
@@ -250,22 +264,22 @@ function getTokenIdForPool(poolRisk: string, tokenSymbol: string): number {
   // This is just a placeholder mapping
   const tokenIdMap: Record<string, Record<string, number>> = {
     low: {
-      usdt: 1,
-      usdc: 2,
-      dai: 3,
-      eth: 4,
+      usdt: 4,
+      usdc: 3,
+      dai: 2,
+      eth: 1,
     },
     medium: {
-      usdt: 5,
-      usdc: 6,
-      dai: 7,
-      eth: 8,
+      usdt: 4,
+      usdc: 3,
+      dai: 2,
+      eth: 1,
     },
     high: {
-      usdt: 9,
-      usdc: 10,
-      dai: 11,
-      eth: 12,
+      usdt: 4,
+      usdc: 3,
+      dai: 2,
+      eth: 1,
     },
   };
 

@@ -452,38 +452,59 @@ export class PoolCacheService implements OnModuleInit {
     // Create a copy of the pools to modify
     const enhancedPools = [...pools];
 
-    // Set realistic APR ranges based on strategy
+    // Get the target average APR for this strategy (must match getAllStrategyAprs demo values)
+    let targetAvgApr = 0;
     let minApr = 0;
     let maxApr = 0;
 
     switch (strategy) {
       case 'low':
+        targetAvgApr = 18.75; // This should match the value in getAllStrategyAprs
         minApr = 15;
         maxApr = 25;
         break;
       case 'medium':
+        targetAvgApr = 35.42; // This should match the value in getAllStrategyAprs
         minApr = 25;
         maxApr = 50;
         break;
       case 'high':
+        targetAvgApr = 72.89; // This should match the value in getAllStrategyAprs
         minApr = 50;
         maxApr = 120;
         break;
     }
 
-    // Assign varied APR values within the appropriate range to each pool
+    // First, assign varied APR values within the appropriate range to each pool
     enhancedPools.forEach((pool, index) => {
       // Create a varied distribution of APRs within the range
+      // We use an exponential decay to make the top pools have higher APRs
       const position = index / (enhancedPools.length || 1); // 0 to 1 position
       const aprSpread = maxApr - minApr;
-      // Exponential decay ensures first pools get higher APRs
       pool.apr = maxApr - aprSpread * Math.pow(position, 0.7);
 
       // Add some slight randomness for more realistic values
-      pool.apr = Math.round((pool.apr + (Math.random() * 5 - 2.5)) * 100) / 100;
+      pool.apr = Math.round((pool.apr + (Math.random() * 3 - 1.5)) * 100) / 100;
 
       // Ensure APR stays within the range
       pool.apr = Math.max(minApr, Math.min(maxApr, pool.apr));
+    });
+
+    // Calculate the average of our generated APRs
+    const poolsToUse = enhancedPools.slice(0, count);
+    const initialAvg =
+      poolsToUse.reduce((sum, pool) => sum + (pool.apr || 0), 0) /
+      poolsToUse.length;
+
+    // Adjust all APRs to make the average match our target
+    const adjustmentFactor = targetAvgApr / initialAvg;
+    poolsToUse.forEach((pool) => {
+      if (pool.apr) {
+        // Scale all APRs by the adjustment factor to hit our target average
+        pool.apr = Math.round(pool.apr * adjustmentFactor * 100) / 100;
+        // Ensure we still respect the min/max bounds
+        pool.apr = Math.max(minApr, Math.min(maxApr, pool.apr));
+      }
     });
 
     // Filter out nulls and sort by APR (highest first)

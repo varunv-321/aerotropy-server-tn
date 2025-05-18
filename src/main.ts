@@ -31,26 +31,3 @@ async function bootstrap() {
   console.log(`Application is running on port ${port}`);
 }
 bootstrap();
-
-// Export for Vercel serverless function
-export default async (req, res) => {
-  const app = await NestFactory.create(AppModule);
-  
-  app.enableCors({
-    origin: '*',
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    credentials: true,
-  });
-  
-  app.useGlobalPipes(new ValidationPipe());
-  
-  const config = new DocumentBuilder()
-    .setTitle('Yield Aggregator Vault API')
-    .setDescription('API for managing Uniswap V3/V4 yield aggregation')
-    .setVersion('1.0')
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api', app, document);
-  
-  return app.getHttpAdapter().getInstance()(req, res);
-};

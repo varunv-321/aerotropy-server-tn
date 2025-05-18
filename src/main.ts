@@ -13,6 +13,9 @@ async function bootstrap() {
     credentials: true,
   });
 
+  // Set global prefix for all API routes
+  app.setGlobalPrefix('v1');
+
   // Enable global validation pipe for class-validator
   app.useGlobalPipes(new ValidationPipe());
 
@@ -25,9 +28,7 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
 
-  // Get the port from environment variable or use 3000 as default
   const port = process.env.PORT || 3000;
   await app.listen(port);
-  console.log(`Application is running on port ${port}`);
 }
 bootstrap();
